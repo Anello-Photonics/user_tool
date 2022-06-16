@@ -148,8 +148,11 @@ class ReadableScheme(Scheme):
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
         if num_commas == len(FORMAT_IMU) -1:
             self.set_fields_from_list(message, FORMAT_IMU, payload)
-        elif num_commas == len(FORMAT_IMU_WITH_FOG_VOLTS) - 1:
-            self.set_fields_from_list(message, FORMAT_IMU_WITH_FOG_VOLTS, payload)
+        elif num_commas == len(FORMAT_IMU_3FOG) - 1:
+            self.set_fields_from_list(message, FORMAT_IMU_3FOG, payload)
+        # elif num_commas == len(FORMAT_IMU_WITH_FOG_VOLTS) - 1:
+        #     self.set_fields_from_list(message, FORMAT_IMU_WITH_FOG_VOLTS, payload)
+        #print(message)
 
     def set_payload_fields_INS(self, message, payload):
         # check with format by number of commas. num commas = num fields - 1

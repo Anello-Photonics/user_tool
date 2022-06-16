@@ -34,10 +34,29 @@ FORMAT_IMU = [
     ("angrate_x_dps", float),
     ("angrate_y_dps", float),
     ("angrate_z_dps", float),
-    ("fog_angrate_dps", float),
+    ("fog_angrate_z_dps", float),
+    ("odometer_speed_mps", float),
+    ("odometer_time_ms", float),
+    ("temperature_c", float),
+    ("sync_gps_ns", int)
+]
+
+FORMAT_IMU_3FOG = [
+    ("imu_time_ms", float),
+    ("accel_x_g", float),
+    ("accel_y_g", float),
+    ("accel_z_g", float),
+    ("angrate_x_dps", float),
+    ("angrate_y_dps", float),
+    ("angrate_z_dps", float),
+    ("fog_angrate_x_dps", float),
+    ("fog_angrate_y_dps", float),
+    ("fog_angrate_z_dps", float),
+>>>>>>> cb8431d (parse IMU/INS/GPS messages with synchronized gps nanoseconds at end)
     ("odometer_speed_mps", float),
     ("odometer_time_ms", float),
     ("temperature_c", float)
+    #("sync_gps_ns", int) put it here too?
 ]
 
 #older A1 firmware has fog volts, removed in v0.2.1
@@ -136,7 +155,8 @@ FORMAT_GPS = [
     ("num_sats", int),
     ("speed_accuracy_mps", float),
     ("heading_accuracy_deg", float),
-    ("carrier_solution_status", int)
+    ("carrier_solution_status", int),
+    ("sync_gps_ns", int)
 ]
 
 FORMAT_ODO = [
@@ -157,7 +177,8 @@ FORMAT_INS = [
     ("attitude_0_deg", float),
     ("attitude_1_deg", float),
     ("attitude_2_deg", float),
-    ("zupt_flag", int)
+    ("zupt_flag", int),
+    ("sync_gps_ns", int)
 ]
 
 #for old A1 firmware, INS message has extra comma when position not initialized

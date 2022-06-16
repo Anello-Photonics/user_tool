@@ -122,15 +122,22 @@ FLUSH_FREQUENCY = 200
 
 #__________Log export configs__________:
 EXPORT_MESSAGE_TYPES = [b'IMU', b'INS', b'GPS']
-EXPORT_IMU_FIELDS = ["imu_time_ms","accel_x_g","accel_y_g","accel_z_g",
-                     "angrate_x_dps","angrate_y_dps","angrate_z_dps","fog_angrate_dps",
+
+# EXPORT_IMU_FIELDS = ["imu_time_ms","accel_x_g","accel_y_g","accel_z_g",
+#                      "angrate_x_dps","angrate_y_dps","angrate_z_dps","fog_angrate_dps",
+
+EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_gps_ns",
+                     "accel_x_g","accel_y_g","accel_z_g",
+                     "angrate_x_dps","angrate_y_dps","angrate_z_dps","fog_angrate_z_dps",
                      "odometer_speed_mps","odometer_time_ms","temperature_c"]
 
-EXPORT_GPS_FIELDS = ["imu_time_ms","gps_time_ns","lat_deg","lon_deg","alt_ellipsoid_m","alt_msl_m",
+EXPORT_GPS_FIELDS = ["imu_time_ms","gps_time_ns", "sync_gps_ns",
+                     "lat_deg","lon_deg","alt_ellipsoid_m","alt_msl_m",
                     "speed_mps","heading_deg","accuracy_horizontal_m","accuracy_vertical_m","PDOP",
                     "gnss_fix_type","num_sats","speed_accuracy_mps", "heading_accuracy_deg","carrier_solution_status", "position_geojson"]
 
-EXPORT_INS_FIELDS = ["imu_time_ms","gps_time_ns","ins_solution_status","lat_deg","lon_deg","alt_m",
+EXPORT_INS_FIELDS = ["imu_time_ms","gps_time_ns", "sync_gps_ns",
+                     "ins_solution_status","lat_deg","lon_deg","alt_m",
                     "velocity_0_mps","velocity_1_mps","velocity_2_mps","attitude_0_deg", "attitude_1_deg","attitude_2_deg",
                      "zupt_flag", "position_geojson"]
 
