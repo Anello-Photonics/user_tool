@@ -3,7 +3,7 @@ from abc import ABC
 try:  # importing from inside the package
 	from config.board_config import *
 except ModuleNotFoundError:  # importing from outside the package
-	from tools.config.board_config import *
+	from anello_tools.config.board_config import *
 
 from builtins import input
 import socket

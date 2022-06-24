@@ -17,10 +17,10 @@ try:  # importing from inside the package
     import connection
     from config.board_config import *
 except ModuleNotFoundError:  # importing from outside the package
-    import tools.readable_scheme as readable_scheme
-    from tools.message_scheme import Message
-    import tools.connection
-    from tools.config.board_config import *
+    import anello_tools.readable_scheme as readable_scheme
+    from anello_tools.message_scheme import Message
+    import anello_tools.connection
+    from anello_tools.config.board_config import *
 
 
 def default_log_name(serialNum = None):

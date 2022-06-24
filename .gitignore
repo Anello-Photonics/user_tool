@@ -6,3 +6,4 @@ venv/
 *.txt
 *.csv
 *.nmea
+*.egg*
