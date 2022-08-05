@@ -150,20 +150,34 @@ class ReadableScheme(Scheme):
             self.set_fields_from_list(message, FORMAT_IMU, payload)
         elif num_commas == len(FORMAT_IMU_3FOG) - 1:
             self.set_fields_from_list(message, FORMAT_IMU_3FOG, payload)
+        elif num_commas == len(FORMAT_IMU_NOSYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_IMU_NOSYNC, payload)
         # elif num_commas == len(FORMAT_IMU_WITH_FOG_VOLTS) - 1:
         #     self.set_fields_from_list(message, FORMAT_IMU_WITH_FOG_VOLTS, payload)
-        #print(message)
 
     def set_payload_fields_INS(self, message, payload):
         # check with format by number of commas. num commas = num fields - 1
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
         if num_commas == len(FORMAT_INS) - 1:
             self.set_fields_from_list(message, FORMAT_INS, payload)
-        elif num_commas == len(FORMAT_INS_EXTRA_COMMA) - 1:
-            self.set_fields_from_list(message, FORMAT_INS_EXTRA_COMMA, payload)
+        # elif num_commas == len(FORMAT_INS_EXTRA_COMMA) - 1: #same length now with gps ns added - can't check for it
+        #     self.set_fields_from_list(message, FORMAT_INS_EXTRA_COMMA, payload)
+        elif num_commas == len(FORMAT_INS_NOSYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_INS_NOSYNC, payload)
 
     def set_payload_fields_GPS(self, message, payload):
-        self.set_fields_from_list(message, FORMAT_GPS, payload)
+        num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
+        if num_commas == len(FORMAT_GPS) - 1:
+            self.set_fields_from_list(message, FORMAT_GPS, payload)
+        elif num_commas == len(FORMAT_GPS_NOSYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_GPS_NOSYNC, payload)
+
+    def set_payload_fields_GP2(self, message, payload):
+        num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
+        if num_commas == len(FORMAT_GP2) - 1:
+            self.set_fields_from_list(message, FORMAT_GP2, payload)
+        elif num_commas == len(FORMAT_GP2_NOSYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_GP2_NOSYNC, payload)
 
     def set_payload_fields_ERR(self, message, payload):
         self.set_fields_from_list(message, FORMAT_ERR, payload)

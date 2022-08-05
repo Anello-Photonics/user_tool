@@ -41,6 +41,20 @@ FORMAT_IMU = [
     ("sync_gps_ns", int)
 ]
 
+FORMAT_IMU_NOSYNC = [
+    ("imu_time_ms", float),
+    ("accel_x_g", float),
+    ("accel_y_g", float),
+    ("accel_z_g", float),
+    ("angrate_x_dps", float),
+    ("angrate_y_dps", float),
+    ("angrate_z_dps", float),
+    ("fog_angrate_z_dps", float),
+    ("odometer_speed_mps", float),
+    ("odometer_time_ms", float),
+    ("temperature_c", float),
+]
+
 FORMAT_IMU_3FOG = [
     ("imu_time_ms", float),
     ("accel_x_g", float),
@@ -158,6 +172,29 @@ FORMAT_GPS = [
     ("sync_gps_ns", int)
 ]
 
+FORMAT_GPS_NOSYNC = [
+    ("imu_time_ms", float),
+    ("gps_time_ns", int),
+    ("lat_deg", float),
+    ("lon_deg", float),
+    ("alt_ellipsoid_m", float),
+    ("alt_msl_m", float),
+    ("speed_mps", float),
+    ("heading_deg", float),
+    ("accuracy_horizontal_m", float),
+    ("accuracy_vertical_m", float),
+    ("PDOP", float),
+    ("gnss_fix_type", int),
+    ("num_sats", int),
+    ("speed_accuracy_mps", float),
+    ("heading_accuracy_deg", float),
+    ("carrier_solution_status", int),
+]
+
+#APGP2 message from second antenna: same format as APGPS
+FORMAT_GP2 = FORMAT_GPS
+FORMAT_GP2_NOSYNC = FORMAT_GPS_NOSYNC
+
 FORMAT_ODO = [
     ("speed", float)
 ]
@@ -180,8 +217,24 @@ FORMAT_INS = [
     ("sync_gps_ns", int)
 ]
 
+FORMAT_INS_NOSYNC = [
+    ("imu_time_ms", int),
+    ("gps_time_ns", int),
+    ("ins_solution_status", int), #was heading_initialized
+    ("lat_deg", float),
+    ("lon_deg", float),
+    ("alt_m", float),
+    ("velocity_0_mps", float), #relative to the orientation setting, will be north, east, down in default +X+Y+Z
+    ("velocity_1_mps", float),
+    ("velocity_2_mps", float),
+    ("attitude_0_deg", float),
+    ("attitude_1_deg", float),
+    ("attitude_2_deg", float),
+    ("zupt_flag", int),
+]
+
 #for old A1 firmware, INS message has extra comma when position not initialized
-FORMAT_INS_EXTRA_COMMA = [
+FORMAT_INS_EXTRA_COMMA = [#TODO - this is now the same length as FORMAT_INS with sync_gps_ns- can't identify it- remove?
     ("imu_time_ms", int),
     ("gps_time_ns", int),
     ("extra comma", int), #for the extra comma
