@@ -722,7 +722,7 @@ class UserProgram:
                     #compute ins speed as magnitude. include vz? should be small anyway
                     vx = float(ins_msg.velocity_0_mps) if hasattr(ins_msg, "velocity_0_mps") else 0
                     vy = float(ins_msg.velocity_1_mps) if hasattr(ins_msg, "velocity_1_mps") else 0
-                    vz = float(ins_msg.velocity_1_mps) if hasattr(ins_msg, "velocity_2_mps") else 0
+                    vz = float(ins_msg.velocity_2_mps) if hasattr(ins_msg, "velocity_2_mps") else 0
                     magnitude = ((vx**2)+(vy**2)+(vz**2))**(1/2)
                     # print("vx: " + str(vx))
                     # print("vy: " + str(vy))
