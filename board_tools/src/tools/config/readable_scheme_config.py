@@ -52,7 +52,6 @@ FORMAT_IMU_3FOG = [
     ("fog_angrate_x_dps", float),
     ("fog_angrate_y_dps", float),
     ("fog_angrate_z_dps", float),
->>>>>>> cb8431d (parse IMU/INS/GPS messages with synchronized gps nanoseconds at end)
     ("odometer_speed_mps", float),
     ("odometer_time_ms", float),
     ("temperature_c", float)
