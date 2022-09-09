@@ -3,9 +3,9 @@ try:  # importing from inside the package
     from config.readable_scheme_config import *
     from connection import *
 except ModuleNotFoundError:  # importing from outside the package
-    from tools.message_scheme import Scheme, Message
-    from tools.config.readable_scheme_config import *
-    from tools.connection import *
+    from anello_tools.message_scheme import Scheme, Message
+    from anello_tools.config.readable_scheme_config import *
+    from anello_tools.connection import *
 
 # b'AA' -> 170
 def ascii_to_int(x):

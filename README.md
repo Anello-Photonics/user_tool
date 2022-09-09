@@ -30,3 +30,14 @@ This is main branch which works for the most common A1 configuration. You should
             - pip uninstall numpy
             - sudo apt install matplotlib
             - sudo apt install numpy
+
+### Pip installation
+To install the driver as a Python API install it as a package with pip.
+```bash
+cd board_tools/src
+pip install .
+```
+You can then use the API functions in python
+```python
+from anello_tools.collector import Collector
+```

@@ -11,10 +11,10 @@ try:  # importing from inside the package
     from connection import *
     from config.board_config import *
 except ModuleNotFoundError:  # importing from outside the package
-    from tools.readable_scheme import *
-    from tools.message_scheme import Message
-    from tools.connection import *
-    from tools.config.board_config import *
+    from anello_tools.readable_scheme import *
+    from anello_tools.message_scheme import Message
+    from anello_tools.connection import *
+    from anello_tools.config.board_config import *
 
 
 # abstraction of the board and its inputs and outputs
@@ -219,7 +219,7 @@ class IMUBoard:
 
     def connect_manually(self, set_data_port=False):
         # get the port numbers
-        # stream = os.popen("python -m serial.tools.list_ports")
+        # stream = os.popen("python -m serial.anello_tools.list_ports")
         # port_names = [line.strip() for line in stream.readlines()]
         port_names = self.list_ports()
         if not port_names:
