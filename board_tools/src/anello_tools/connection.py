@@ -1,9 +1,9 @@
 import serial
 from abc import ABC
 try:  # importing from inside the package
-	from config.board_config import *
+	from class_configs.board_config import *
 except ModuleNotFoundError:  # importing from outside the package
-	from anello_tools.config.board_config import *
+	from anello_tools.class_configs.board_config import *
 
 from builtins import input
 import socket
@@ -22,13 +22,18 @@ class Connection(ABC):
 		raise Exception("base or dummy Connection has no read")
 
 	def readall(self):
-		raise Exception("base or dummy Connection has no readall")
+		pass #called on Dummy in config.py
+		#raise Exception("base or dummy Connection has no readall")
 
 	def read_until(self, expected='\n', size=None):
 		raise Exception("base or dummy Connection has no read_until")
 
 	def read_ready(self):
 		pass
+
+	#read a single message. optional start and end char arguments
+	def read_one_message(self, start_char=None, end_char=None):
+		raise Exception("base or dummy Connection has no read_one_message")
 
 	def write(self, data):
 		raise Exception("base or dummy Connection has no write")
@@ -73,6 +78,7 @@ class DummyConnection(Connection):
 class SerialConnection(Connection):
 	def __init__(self, port=None, baud=DEFAULT_BAUD, timeout=TIMEOUT_REGULAR, write_timeout=TIMEOUT_REGULAR):
 		self.connection = serial.Serial(port, baud, timeout=timeout, write_timeout=write_timeout)
+		self.readall() #clear any old data when connecting
 
 	def __repr__(self):
 		return "SerialConnection: "+str(self.connection)
@@ -82,14 +88,31 @@ class SerialConnection(Connection):
 
 	def readall(self):
 		#fixed size read might not be enough sometimes
-		return self.connection.read(self.connection.in_waiting)
+		try:
+			return self.connection.read(self.connection.in_waiting)
+		except Exception as e:
+			#print("error in readall: "+str(type(e))+": "+str(e))
+			#print("returning empty read")
+			return b''
 		#return self.connection.read(READ_SIZE)
 
 	def read_until(self, expected='\n', size=None):
 		return self.connection.read_until(expected, size)
 
 	def read_ready(self):
-		return self.connection.in_waiting > 0
+		try:
+			return self.connection.in_waiting > 0
+		except Exception as e:
+			#print("error in read_ready: "+str(type(e))+": "+str(e))
+			#print("returning False")
+			#TODO - should it return/print some error depending on what exception type? SerialException if disconnected
+			return False
+
+	def read_one_message(self, start_char=None, end_char=None):
+		before = self.read_until(start_char)
+		#TODO: handle whatever came before start code?
+		data = self.read_until(end_char)
+		return data
 
 	def write(self, data):
 		return self.connection.write(data)
@@ -124,7 +147,7 @@ class SerialConnection(Connection):
 
 
 class UDPConnection(Connection):
-	def __init__(self, remote_ip, remote_port, local_port, timeout=TIMEOUT_REGULAR):
+	def __init__(self, remote_ip, remote_port, local_port, timeout=0):
 		self.remote_ip = remote_ip
 		self.remote_port = remote_port
 		self.local_port = local_port
@@ -137,7 +160,7 @@ class UDPConnection(Connection):
 		self.sock = socket.socket(family_addr, socket.SOCK_DGRAM)
 		self.sock.bind(('', self.local_port))
 		self.sock.setblocking(False)
-		self.sock.settimeout(timeout)
+		self.sock.settimeout(0) #needs to be 0 so readall gets only the available data, otherwise could read forever
 		# except socket.error:
 		# 	print('Failed to create socket')
 
@@ -145,16 +168,26 @@ class UDPConnection(Connection):
 		try:
 			reply, addr = self.sock.recvfrom(size) # buffsize < message length will error
 			return reply
-		except Exception as e:
+		except Exception as e: #would be BlockingIOError when no data and timeout 0
 			return None
 		# need internal buffer to read smaller amounts?
 
+	# reads only one message up to length READ_SIZE
+	def read_one_message(self, start_char=None, end_char=None):
+		return self.read(READ_SIZE) #don't need the start and end char args for this
+
 	def readall(self):
-		return self.read(READ_SIZE)
+		all_data = b''
+		last_msg_data = self.read_one_message()
+		while last_msg_data:
+			all_data += last_msg_data
+			last_msg_data = self.read_one_message()
+		return all_data
 
 	def read_until(self, expected='\n', size=None):
 		# either need a sock read_until method, or loop reading one at a time until expected reached
-		pass
+		return self.read(READ_SIZE) #temporary fix, should implement actual read_until
+		#pass
 
 	def read_ready(self):
 		reads, writes, errors = select.select([self.sock], [], [], 0)
@@ -211,9 +244,9 @@ class FileReaderConnection(Connection):
 		return self.reader.read(size)
 
 	# read until <expected> or until <size> bytes if not None
-	def read_until(self, expected='\n', size=None):
+	def read_until(self, expected='\n', size_limit=2048):
 		out = b''
-		if size is None:
+		if size_limit is None:
 			while(True):
 				data = self.reader.read(1)
 				out += data
@@ -222,9 +255,9 @@ class FileReaderConnection(Connection):
 				if out[-len(expected):] == expected:
 					break
 		else:
-			if size < 1:
-				size = 1  # match behavior of Serial.read_until
-			for i in range(size):
+			if size_limit < 1:
+				size_limit = 1  # match behavior of Serial.read_until
+			for i in range(size_limit):
 				data = self.reader.read(1)
 				out += data
 				if data == b'':
@@ -232,6 +265,12 @@ class FileReaderConnection(Connection):
 				if out[-len(expected):] == expected:
 					break
 		return out
+
+	def read_one_message(self, start_char=None, end_char=None):
+		before = self.read_until(start_char)
+		#TODO: handle whatever came before start code?
+		data = self.read_until(end_char)
+		return data
 
 	def close(self):
 		self.reader.close()

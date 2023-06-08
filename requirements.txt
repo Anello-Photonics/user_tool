@@ -1,6 +1,11 @@
-cutie
-matplotlib
-numpy
-pyserial
-PySimpleGUI
-readchar==3.0.4 #force this version because 3.0.5 causes arrow key issues in windows 11
+bitstring #used for binary parsing in rtcm_scheme.py
+cutie #text based menus in user_program, config.py and other tools
+geotiler #map library for user_program map
+matplotlib #graphing, requirement for PySimpleGUI
+numpy #vector math, used in calibration/validation/plotting
+pandas #csv processing
+Pillow #image processing, used for arrow in user_program map tab
+pylru #least recently used cache, for user_program map caching
+pyrtcm #rtcm message parsing in rtcm_scheme.py
+pyserial #serial port library
+PySimpleGUI #graphics in user_program.py

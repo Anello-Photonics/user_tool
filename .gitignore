@@ -1,9 +1,10 @@
+<<<<<<< HEAD
 __pycache__
-src/tools/logs/*
-exports/*
+src/anello_tools/logs/*
 venv/
 .idea/
 *.txt
 *.csv
 *.nmea
 *.egg*
+!requirements.txt

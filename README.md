@@ -1,14 +1,11 @@
-This repo contains tools for logging and configuring with the Anello A-1.
-
-This is main branch which works for the most common A1 configuration. You should probably use this branch unless you asked for the higher rate configuration. The regular configuration has ASCII outputs such as #APIMU, #APINS, #APGPS. If your unit is configured with high rate binary outputs, use the high_rate_binary branch instead.
-
+This repo contains tools for logging and configuring Anello Products.
 
 - contents:
     - board_tools/user_program.py  - interactive configuration and logging tool.
         - usage: python user_program.py
     - board_tools/graph_demo.py - graphing demo. will integrate this into user tool.
         - usage: python graph_demo.py
-    - board_tools/src/tools: library for communicating with the A-1, used by the other tools
+    - board_tools/src/anello_tools: library for communicating with the product, used by the other tools
 
 - requirements:
     - Python 3.9
@@ -31,6 +28,7 @@ This is main branch which works for the most common A1 configuration. You should
             - sudo apt install matplotlib
             - sudo apt install numpy
 
+
 ### Pip installation
 To install the driver as a Python API install it as a package with pip.
 ```bash
@@ -41,3 +39,11 @@ You can then use the API functions in python
 ```python
 from anello_tools.collector import Collector
 ```
+
+### License information for maps feature:
+
+the user can select OpenStreetMap or Stamen in the dropdown in maps tab of monitor window.
+
+with "osm" selected: Map images from OpenStreetMap under ODbL (openstreetmap.org/copyright)",
+
+with "stamen-terrain" selected: Map tiles by Stamen Design (stamen.com) under CC BY 3.0 (creativecommons.org/licenses/by/3.0). Data by OpenStreetMap under ODbL (openstreetmap.org/copyright)

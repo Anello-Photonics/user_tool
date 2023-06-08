@@ -1,9 +1,11 @@
 #__________Main user program configs__________:
 DEBUG = False
 
+
 def debug_print(text):
     if DEBUG:
         print(text)
+
 
 MENU_OPTIONS = [
     "Refresh",
@@ -34,40 +36,34 @@ ERROR_CODES = {
     11: "Feature Disabled"
 }
 
-CFG_FIELD_NAMES = [
-    "OUTPUT DATA RATE",
-    "ORIENTATION",
-    "ENABLE GPS",
-    #"GPS 2",
-    "ODOMETER",
-    "ENABLE FOG",
-    "DHCP (AUTO ASSIGN IP)",
-    "UDP A-1 IP",
-    "UDP COMPUTER IP",
-    "UDP COMPUTER DATA PORT ",
-    "UDP COMPUTER CONFIGURATION PORT",
-    "UDP COMPUTER ODOMETER PORT"
-]
-
-# cfg codes in messaging. must match order of CFG_FIELD_NAMES
-# TODO use a dict or 2-way lookup?
-CFG_FIELD_CODES = [
-    "odr",
-    "orn",
-    "gps1",
-    #"gps2",
-    "odo",
-    "fog",
-    "dhcp",
-    "lip",
-    "rip",
-    "rport1",
-    "rport2",
-    "rport3"
-]
+#dictionary of user config codes to names. TODO - use a bidict for two way lookup?
+CFG_CODES_TO_NAMES = {
+    "odr":    "Output Data Rate (Hz)                   ",
+    "orn":    "Orientation                             ",
+    "gps1":   "Enable GPS 1                            ",
+    "gps2":   "Enable GPS 2                            ",
+    "odo":    "Odometer                                ",
+    "fog":    "Enable FOG                              ", #TODO - remove this? may not do anything.
+    "dhcp":   "DHCP (Auto Assign IP)                   ",
+    "lip":    "UDP A-1 IP                              ",
+    "rip":    "UDP Computer IP                         ",
+    "rport1": "UDP Computer Data Port                  ",
+    "rport2": "UDP Computer Configuration Port         ",
+    "rport3": "UDP Computer Odometer Port              ",
+    "mfm":    "Message Format                          ",
+    "uart":   "Serial Output                           ",
+    "eth":    "Ethernet Output                         ",
+    "lpa":    "Acceleration Low Pass Filter Cutoff (Hz)",
+    "lpw":    "MEMS Gyro Low Pass Filter Cutoff (Hz)   ",
+    "lpo":    "Optical Gyro Low Pass Filter Cutoff (Hz)",
+    #"nhc":    "Non-Holonomic Constraint                ", #TODO - hide this for now?
+    "sync":   "Time Sync                               ",
+    "min":    "Configuration Print Interval (minutes)  ", #TODO - do we want to show this?
+    "ntrip":  "NTRIP Input Channel                     ",
+}
 
 #UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
-UDP_FIELDS = ["dhcp","lip", "rip", "rport1", "rport2"]
+UDP_FIELDS = ["dhcp", "lip", "rip", "rport1", "rport2"]
 
 # suggestions on what you can enter. only for type in options
 CFG_FIELD_EXAMPLES = {
@@ -76,18 +72,42 @@ CFG_FIELD_EXAMPLES = {
     "rip": "(aaa.bbb.ccc.ddd)",
     "rport1": "(int from 1 to 65535)",
     "rport2": "(int from 1 to 65535)",
-    "rport3": "(int from 1 to 65535)"
+    "rport3": "(int from 1 to 65535)",
 }
 
 # fixed list of values to select
 CFG_VALUE_OPTIONS = {
     "orn": ["North-East-Down (+X+Y+Z)", "East-North-Up (+Y+X-Z)", "Select Other"],
-    "odr": [20, 50, 100, 200],
+    "mfm": ["1", "4"], #1 = ASCII, 4 = RTCM. see CFG_VALUE_NAMES
+    "odr": ["20", "50", "100", "200"],
     "gps1": ["on", "off"],
-    #"gps2": ["on", "off"],
+    "gps2": ["on", "off"],
     "odo": ["mps", "mph", "kph", "fps"],
     "fog": ["on", "off"],
-    "dhcp": ["on", "off"]
+    "dhcp": ["on", "off"],
+    "uart": ["on", "off"],
+    "eth": ["on", "off"],
+    "sync": ["on", "off"],
+    #"nhc": ["0", "1", "2", "7"], #see CFG_VALUE_NAMES
+    "ntrip": ["0", "1", "2"],
+}
+
+CFG_VALUE_NAMES = {
+    #only put mfm 1/4 here since we only give customers those options
+    ("mfm", "1"): "ASCII",
+    ("mfm", "4"): "RTCM",
+    #add any others ? eg odometer unit names ("odo", "mph" : "miles per hour")
+    ("odo", "mps"): "meters per second",
+    ("odo", "mph"): "miles per hour",
+    ("odo", "kph"): "kilometers per hour",
+    ("odo", "fps"): "feet per second",
+    # ("nhc", "0"): "car/default",
+    # ("nhc", "1"): "truck",
+    # ("nhc", "2"): "agricultural",
+    # ("nhc", "7"): "aerial (no constraint)",
+    ("ntrip", "0"): "off",
+    ("ntrip", "1"): "serial",
+    ("ntrip", "2"): "ethernet",
 }
 
 #can have notes for just 2 cases now - if more notes needed, do another list or dictionary
@@ -103,10 +123,10 @@ ORN_8_OPTIONS = [
 ]
 
 VEH_FIELDS = {
-    "LEVER ARM 1": (("x", "g1x"), ("y", "g1y"), ("z", "g1z")),
-    "LEVER ARM 2": (("x", "g2x"), ("y", "g2y"), ("z", "g2z")),
-    "VEHICLE CENTER": (("x", "cnx"), ("y", "cny"), ("z", "cnz")),
-    "OUTPUT CENTER": (("x", "ocx"), ("y", "ocy"), ("z", "ocz"))
+    "GPS Antenna 1 ": (("x", "g1x"), ("y", "g1y"), ("z", "g1z")),
+    "GPS Antenna 2 ": (("x", "g2x"), ("y", "g2y"), ("z", "g2z")),
+    "Vehicle Center": (("x", "cnx"), ("y", "cny"), ("z", "cnz")), #TODO - rename to rear axle center?
+    "Output Center ": (("x", "ocx"), ("y", "ocy"), ("z", "ocz"))
 }
 
 #UDP constants
@@ -114,49 +134,91 @@ VEH_FIELDS = {
 #A1_port2 = UDP_LOCAL_CONFIG_PORT
 UDP_CACHE = "udp_settings.txt"
 NTRIP_CACHE = "ntrip_settings.txt"
+NTRIP_TIMEOUT_SECONDS = 2
+NTRIP_RETRY_SECONDS = 30
 
-
-CONNECT_RETRIES=3
-RUNNING_RETRIES=10
+CONNECT_RETRIES = 3
+RUNNING_RETRIES = 10
 FLUSH_FREQUENCY = 200
 
 #__________Log export configs__________:
-EXPORT_MESSAGE_TYPES = [b'IMU', b'INS', b'GPS']
-EXPORT_IMU_FIELDS = ["imu_time_ms","accel_x_g","accel_y_g","accel_z_g",
-                     "angrate_x_dps","angrate_y_dps","angrate_z_dps","fog_angrate_dps",
-                     "odometer_speed_mps","odometer_time_ms","temperature_c"]
+EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
-EXPORT_GPS_FIELDS = ["imu_time_ms","gps_time_ns","lat_deg","lon_deg","alt_ellipsoid_m","alt_msl_m",
-                    "speed_mps","heading_deg","accuracy_horizontal_m","accuracy_vertical_m","PDOP",
-                    "gnss_fix_type","num_sats","speed_accuracy_mps", "heading_accuracy_deg","carrier_solution_status", "position_geojson"]
+EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
+                     "accel_x_g", "accel_y_g", "accel_z_g",
+                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps", "fog_angrate_z_dps",
+                     "odometer_speed_mps", "odometer_time_ms",
+                     "temperature_c"]
 
-EXPORT_INS_FIELDS = ["imu_time_ms","gps_time_ns","ins_solution_status","lat_deg","lon_deg","alt_m",
-                    "velocity_0_mps","velocity_1_mps","velocity_2_mps","attitude_0_deg", "attitude_1_deg","attitude_2_deg",
+EXPORT_IM1_FIELDS = ["imu_time_ms", "sync_time_ms",
+                     "accel_x_g", "accel_y_g", "accel_z_g",
+                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps", "fog_angrate_z_dps",
+                     #IM1 has no odometer info
+                     "temperature_c"]
+
+EXPORT_GPS_FIELDS = ["imu_time_ms", "gps_time_ns",
+                     "lat_deg", "lon_deg", "alt_ellipsoid_m", "alt_msl_m",
+                     "speed_mps", "heading_deg", "accuracy_horizontal_m", "accuracy_vertical_m", "PDOP",
+                     "gnss_fix_type", "num_sats", "speed_accuracy_mps", "heading_accuracy_deg",
+                     "carrier_solution_status", "position_geojson"]
+
+EXPORT_GP2_FIELDS = EXPORT_GPS_FIELDS #make them same for now, but name this so it can change later.
+
+EXPORT_INS_FIELDS = ["imu_time_ms", "gps_time_ns", "ins_solution_status",
+                     "lat_deg", "lon_deg", "alt_m",
+                     "velocity_0_mps", "velocity_1_mps", "velocity_2_mps",
+                     "attitude_0_deg", "attitude_1_deg", "attitude_2_deg",
                      "zupt_flag", "position_geojson"]
 
-EXPORT_DEFAULT_COLOR = [200,200,200]
+EXPORT_HDG_FIELDS = [
+    "imu_time_ms", "gps_time_ns",
+    "relPosN_m", "relPosE_m", "relPosD_m",
+    "relPosLen_m", "relPosHeading_deg",
+    "relPosLenAcc_m", "relPosHeadingAcc_deg",
+    "flags",
+    "gnssFixOK",
+    "diffSoln",
+    "relPosValid",
+    "carrSoln",
+    "isMoving",
+    "refPosMiss", "refObsMiss",
+    "relPosHeading_Valid", "relPos_Normalized",
+]
+
+EXPORT_DEFAULT_COLOR = [200, 200, 200]
 
 EXPORT_GPS_RADIUS = 3
 EXPORT_GPS_COLOR_BASED_ON = "carrier_solution_status"
-EXPORT_GPS_COLORS = {0:[255, 0, 0], 1:[255, 255, 0], 2:[0, 255, 0]}
+EXPORT_GPS_COLORS = {0: [255, 0, 0], 1: [255, 255, 0], 2: [0, 255, 0]}
 
 EXPORT_INS_RADIUS = 1
 EXPORT_INS_COLOR_BASED_ON = "zupt_flag"
 EXPORT_INS_COLORS = {0: [0, 255, 0], 1: [255, 0, 0]}
 
 #__________monitor configs__________:
+#general configs
+MONITOR_MAP_TAB_TITLE = "MAP"
+MONITOR_INS_TAB_TITLE = "INS"
+MONITOR_IMU_TAB_TITLE = "IMU"
+MONITOR_GPS_TAB_TITLE = "GPS"
+MONITOR_GP2_TAB_TITLE = "GP2"
+MONITOR_HDG_TAB_TITLE = "HDG"
 MONITOR_REFRESH_MS = 200 #100
-MONITOR_DEFAULT_VALUE = "--------------"
 ZERO_OUT_TIME = 5
+ODOMETER_ZERO_TIME = 10 #put a long time because odo in monitor updates slowly. at 5, it can blank with odo running.
 SGTHEME = "Reddit"
 # BASE_WIDTH = 1124
 # BASE_HEIGHT = 554
+MONITOR_ALIGN = "right" #alignemnt for label and value text in monitor. can be "left", "right", "center"
+
+#tab 1: numbers monitoring
+MONITOR_DEFAULT_VALUE = "--------------"
 MONITOR_TIMELABEL_SIZE = (10,1)
 MONITOR_TIME_SIZE = (6,1)
 MONITOR_VALUE_SIZE = (15, 1)
 FONT_NAME = "arial"
 VALUE_FONT_SIZE = 25
-MONITOR_LABEL_SIZE = (11,1)
+MONITOR_LABEL_SIZE = (20,1)
 LABEL_FONT_SIZE = 20
 GPS_TEXT = "GPS: "
 LOG_TEXT = "LOG: "
@@ -170,5 +232,45 @@ GPS_FIX_NAMES = {0: "No Fix",
                  3: "3D-Fix",
                  4: "GNSS + Dead Reckoning",
                  5: "Time Only Fix" } #from nav-pvt fix-type: see https://www.u-blox.com/en/docs/UBX-18010854
-INS_SOLN_NAMES = {0: "Attitude Only", 1: "INS (Pos. Only)", 2: "INS (Full Soln.)", 3: "RTK Float", 4: "RTK Fix"} #TODO check these too
+INS_SOLN_NAMES = {0: "Attitude Only", 1: "INS (Pos. Only)", 2: "INS (Full Soln.)", 3: "RTK Float", 4: "RTK Fix"}
 ZUPT_NAMES = {0: "Moving", 1: "Stationary"}
+
+#tab 2: map
+
+#sources for map, should be exact string that geotiler.draw_map uses. # TODO : use other names like "Open Street Map" <-> "osm" ?
+MAP_PROVIDERS = ["osm", "stamen-terrain"] #osm and stamen-terrain seem like good options
+
+##all providers in geotiler, for testing. most of these have less detail than osm and stamen-terrain.
+# MAP_PROVIDERS = ["osm", #good default option.
+#                  "stamen-terrain", "stamen-terrain-lines", "stamen-terrain-background", #terrain map, or parts of it
+#                  "stamen-toner", "stamen-toner-lite", #black/white map, less detail
+#                  "stamen-watercolor", #nice painted look, but not much detail
+#                  "bluemarble"] #color satellite pictures, but can't zoom in close
+##or thunderforest-cycle but it needs an api key
+
+#provider credits as text. TODO - make clickable link?
+MAP_PROVIDER_CREDITS = {
+    "osm": "Map images from OpenStreetMap under ODbL (openstreetmap.org/copyright)",
+    "stamen-terrain": "Map tiles by Stamen Design (stamen.com) under CC BY 3.0 (creativecommons.org/licenses/by/3.0). Data by OpenStreetMap under ODbL (openstreetmap.org/copyright)"
+}
+
+#"Map tiles by Stamen Design (stamen.com) under CC BY 3.0 (creativecommons.org/licenses/by/3.0)\n Data by OpenStreetMap under ODbL (openstreetmap.org/copyright)"
+
+PROVIDER_CREDIT_SIZE = 10
+
+ARROW_FILE_NAME = "chevron_outlined_and_shaded.png" #"big_chevron.png" #name of image file inside map directory
+MAP_ARROW_SIZE = 50
+MAP_ZOOM_MAX = 18 #19 is max for OSM but stamen-terrain seems to only go to 18. TODO - separate min and max for each provider?
+MAP_ZOOM_MIN = 8 #could go down to 1=whole earth, but 3 and below have some load errors
+MAP_ZOOM_DEFAULT = 16
+DEFAULT_MAP_IMAGE = "map/default_map.png"
+MAP_DIMENSIONS = (1000, 700)
+MAX_CACHE_TILES = 2000 #max tiles in map LRU cache in case of memory limit. TODO - calculate how many we can fit in memory.
+# at office: 700x500 pixel map was 9 or 12 tiles, full zoom range with osm and stamen-terrain was 240 total
+
+#roll/pitch dials
+DIAL_SIDE_PIXELS = 200
+DIAL_OFFSET_DEG = 0
+DIAL_ANGLE_STEP = 15
+DIAL_DIRECTION = -1 #should be +1 or -1, to set direction of angles in dials
+DIAL_TEXT_SIZE = 15

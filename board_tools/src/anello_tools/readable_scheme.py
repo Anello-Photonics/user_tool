@@ -1,33 +1,43 @@
 try:  # importing from inside the package
     from message_scheme import Scheme, Message
-    from config.readable_scheme_config import *
+    from class_configs.readable_scheme_config import *
     from connection import *
 except ModuleNotFoundError:  # importing from outside the package
     from anello_tools.message_scheme import Scheme, Message
-    from anello_tools.config.readable_scheme_config import *
+    from anello_tools.class_configs.readable_scheme_config import *
     from anello_tools.connection import *
 
 # b'AA' -> 170
 def ascii_to_int(x):
     return int(x, 16)
 
+
 #170 -> b'AA'
 def int_to_ascii(x):
     return "{0:0{1}X}".format(x,2).encode()
+
+
+#extract flags as a separate function independent of paylod -> can use it in RTCM too.
+def extract_flags_HDG(message):
+    if hasattr(message, "flags"):
+        flag_bits = format(message.flags, '010b') #int into string of 9 bits, zero padded
+        flag_bits_reversed = "".join(reversed(flag_bits)) #put backward
+        for i in HEADING_FLAGS:
+            setattr(message, HEADING_FLAGS[i], int(flag_bits_reversed[i]))  #TODO - is this the right bit order or backwards?
+    #combine the carrSoln: should have both bit attributes in HEADING_FLAGS
+    if hasattr(message, "carrSoln_bit1") and hasattr(message, "carrSoln_bit2"):
+        setattr(message, "carrSoln", 2*message.carrSoln_bit2 + message.carrSoln_bit1) #TODO - is this the right bit order or backwards?
+
 
 #messages encoded in readable form with start and end codes, comma separted values
 class ReadableScheme(Scheme):
     
     #since there are start and end codes, read everything between them as one message
     def read_one_message(self, connection):
-        # UDPConnection doesn't have a read_until, it reads entire lines. So need different handling here
-        # TODO - moving read_one_message into connection class might be more tidy. then it needs to know start/end codes
-        if type(connection) is UDPConnection:
-            data = connection.readall() #TODO does it need a read until end char function?
-        else:
-            before = connection.read_until(READABLE_START)
-            #TODO can handle partial start on whatever came before start code
-            data = connection.read_until(READABLE_END)
+
+        # get one message as raw data: implemented in SerialConnection, UDPConnection, FileReaderConnection
+        data = connection.read_one_message(start_char=READABLE_START, end_char=READABLE_END)
+
         if not data:
             return None
         #print("receiving: "+data.decode())
@@ -42,6 +52,32 @@ class ReadableScheme(Scheme):
             self.set_fields_general(message, data)
             return message
 
+    # def read_message_from_file(self, input_file):
+    #     # if (not hasattr(self, "reader")) or self.reader is None:
+    #     #     self.reader = RTCMReader(input_file)
+    #     message = Message()
+    #     try:
+    #         #raw, parsed = self.reader.read()
+    #
+    #         before = connection.read_until(READABLE_START)
+    #         # TODO can handle partial start on whatever came before start code
+    #         data = connection.read_until(READABLE_END)
+    #
+    #         #strip off preamble then pass the raw data to set_fields_general.
+    #         #or if using parsed, it would already have the message tye (4058) and checksum split from payload
+    #         if raw:
+    #             data = raw.lstrip(RTCM_PREAMBLE)
+    #             self.set_fields_general(message, data)
+    #         else: #complete. TODO - is this the correct check for end of file? seems to work.
+    #             return None
+    #     except RTCMParseError: #error from RTCMReader.read if checksum fails
+    #         message.valid = False
+    #         message.error = "checksum"
+    #     except Exception as e: #catchall error
+    #         message.valid = False
+    #         message.error = "parsing error: "+str(e)
+    #     return message
+
     #write a single message to the connection
     def write_one_message(self, message, connection):
         data = READABLE_START + self.build_message_general(message) + READABLE_END
@@ -50,10 +86,14 @@ class ReadableScheme(Scheme):
 
     def set_fields_general(self, message, data):
         try:
-            message.data = data
+            #message.data = data
             sep_index = data.find(READABLE_CHECKSUM_SEPARATOR)
+            checksum_start_index = sep_index + len(READABLE_CHECKSUM_SEPARATOR)
+            checksum_end_index = checksum_start_index + READABLE_CHECKSUM_LENGTH
+
+            message.data = data[:checksum_end_index] #take off any extras after checksum
             message.checksum_input = data[:sep_index]
-            message.checksum = ascii_to_int(data[sep_index+len(READABLE_CHECKSUM_SEPARATOR):]) #int(data[sep_index+len(READABLE_PAYLOAD_SEPARATOR):], 16) #it has bytes which read as the hex value
+            message.checksum = ascii_to_int(data[checksum_start_index:checksum_end_index]) #int(data[sep_index+len(READABLE_PAYLOAD_SEPARATOR):], 16) #it has bytes which read as the hex value
 
             #could split these from data or from message.checksum_input
             message.talker = data[0: READABLE_TALKER_LENGTH]
@@ -71,7 +111,6 @@ class ReadableScheme(Scheme):
     def build_message_general(self, message):
         msgtype = message.msgtype
         #adds OUR_TALKER here so talker is not a message attribute
-        #then, message can be formed in Session and still work with ByteScheme, assuming message types and fields are consistent.
         data = OUR_TALKER + msgtype
         payload = self.build_payload_for_type(message, msgtype)
         if payload:
@@ -100,19 +139,25 @@ class ReadableScheme(Scheme):
         decoders = {
             b'CAL': self.set_payload_fields_CAL,
             b'IMU': self.set_payload_fields_IMU,
+            b'IM1': self.set_payload_fields_IM1,
             b'GPS': self.set_payload_fields_GPS,
+            b'GP2': self.set_payload_fields_GP2,
+            b'HDG': self.set_payload_fields_HDG,
             b'ERR': self.set_payload_fields_ERR,
             b'CFG': self.set_payload_fields_with_names,
             b'VER': self.set_payload_fields_VER,
             b'SER': self.set_payload_fields_SER,
             b'PID': self.set_payload_fields_PID,
+            b'IHW': self.set_payload_fields_IHW,
+            b'FHW': self.set_payload_fields_FHW,
+            b'FSN': self.set_payload_fields_FSN,
             b'STA': self.set_payload_fields_with_names,
             b'RST': self.set_payload_fields_RST,
             b'PNG': self.set_payload_fields_PNG,
             b'ECH': self.set_payload_fields_ECH,
             b'ODO': self.set_payload_fields_ODO,
             b'INS': self.set_payload_fields_INS,
-            b'VEH': self.set_payload_fields_with_names
+            b'VEH': self.set_payload_fields_with_names,
         }
         decoderFunc = decoders.get(msgtype)
         if decoderFunc:
@@ -128,6 +173,9 @@ class ReadableScheme(Scheme):
             b'VER': self.build_payload_no_fields,
             b'SER': self.build_payload_no_fields,
             b'PID': self.build_payload_no_fields,
+            b'IHW': self.build_payload_no_fields,
+            b'FHW': self.build_payload_no_fields,
+            b'FSN': self.build_payload_no_fields,
             b'STA': self.build_payload_no_fields,
             b'RST': self.build_payload_RST,
             b'PNG': self.build_payload_no_fields,
@@ -141,15 +189,39 @@ class ReadableScheme(Scheme):
             raise Exception("trying to build unknown message type: "+msgtype.decode())
 
     def set_payload_fields_CAL(self, message, payload):
-        self.set_fields_from_list(message, FORMAT_CAL, payload) 
+        num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
+        if num_commas == len(FORMAT_CAL) - 1:
+            self.set_fields_from_list(message, FORMAT_CAL, payload)
+        elif num_commas == len(FORMAT_CAL_3FOG) - 1:
+            self.set_fields_from_list(message, FORMAT_CAL_3FOG, payload)
+        else:
+            message.valid = False
+            message.error = f"unexpected length for CAL: {num_commas}"
 
     def set_payload_fields_IMU(self, message, payload):
         #check with format by number of commas. num commas = num fields - 1
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
-        if num_commas == len(FORMAT_IMU) -1:
-            self.set_fields_from_list(message, FORMAT_IMU, payload)
-        elif num_commas == len(FORMAT_IMU_WITH_FOG_VOLTS) - 1:
-            self.set_fields_from_list(message, FORMAT_IMU_WITH_FOG_VOLTS, payload)
+        #Do as loop?
+        # for format in [FORMAT_IMU, FORMAT_IMU_3FOG, FORMAT_IMU_WITH_FOG_VOLTS]:
+            #if num_commas == len(format) - 1:
+                #self.set_fields_from_list(message, format, payload)
+        if num_commas == len(FORMAT_IMU_NO_SYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_IMU_NO_SYNC, payload)
+        elif num_commas == len(FORMAT_IMU_3FOG) - 1:
+            self.set_fields_from_list(message, FORMAT_IMU_3FOG, payload)
+        elif num_commas == len(FORMAT_IMU_WITH_SYNC) - 1:
+            self.set_fields_from_list(message, FORMAT_IMU_WITH_SYNC, payload)
+        #print(message)
+        else:
+            message.valid = False
+            message.error = f"unexpected length for IMU:  {num_commas}"
+
+    #new IM1 type for IMU unit with/out FOG. should only have one length -> no need to count commas
+    def set_payload_fields_IM1(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_IM1, payload)
+        
+    # def set_payload_fields_IM2(self, message, payload):
+    #     self.set_fields_from_list(message, FORMAT_IM2, payload)
 
     def set_payload_fields_INS(self, message, payload):
         # check with format by number of commas. num commas = num fields - 1
@@ -158,14 +230,25 @@ class ReadableScheme(Scheme):
             self.set_fields_from_list(message, FORMAT_INS, payload)
         elif num_commas == len(FORMAT_INS_EXTRA_COMMA) - 1:
             self.set_fields_from_list(message, FORMAT_INS_EXTRA_COMMA, payload)
+        #print(message)
+        else:
+            message.valid = False
+            message.error = f"unexpected length for INS: {num_commas}"
 
     def set_payload_fields_GPS(self, message, payload):
         self.set_fields_from_list(message, FORMAT_GPS, payload)
 
+    def set_payload_fields_GP2(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_GP2, payload)
+
     def set_payload_fields_ERR(self, message, payload):
         self.set_fields_from_list(message, FORMAT_ERR, payload)
 
-    #CFG response: could have cfg data in response to CFG read
+    def set_payload_fields_HDG(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_HDG, payload)
+        extract_flags_HDG(message)
+
+            #CFG response: could have cfg data in response to CFG read
     #for CFG write - some confirmation message or error
     #all cfg fields are name, then value
     #TODO figure out type conversions
@@ -186,6 +269,15 @@ class ReadableScheme(Scheme):
     
     def set_payload_fields_PID(self, message, payload):
         self.set_fields_from_list(message, FORMAT_PID, payload)
+
+    def set_payload_fields_IHW(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_IHW, payload)
+
+    def set_payload_fields_FHW(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_FHW, payload)
+
+    def set_payload_fields_FSN(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_FSN, payload)
     
     def set_payload_fields_STA(self, message, payload):
         self.set_fields_from_list(message, FORMAT_STA, payload)
