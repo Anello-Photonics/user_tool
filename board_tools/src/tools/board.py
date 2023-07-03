@@ -50,20 +50,20 @@ class IMUBoard:
             success = True
             control_port, data_port, baud = board.read_connection_settings(set_data_port)
             if not control_port: #or not data_port:
-                #print("no control port in cache -> fail")
+                debug_print("no control port in cache -> fail")
                 success = False
             if not set_data_port:
                 data_port = None
             success = success and board.connect_to_ports(data_port, control_port, baud)
         except Exception as e:
             success = False
-            #print("connect from cache error: " + str(e))
+            debug_print("connect from cache error: " + str(e))
         if success:
-            #print("connection from cache success.")
+            debug_print("connection from cache success.")
             board.write_connection_settings(set_data_port)  # should do only on success - from auto or from manual
         else:
             # file not exist, or connecting based on file fails -> detect the settings, then save in a file
-            #print("connection from cache failed -> do auto search")
+            debug_print("connection from cache failed -> do auto search")
             board.release_connections()
             if board.auto_no_cache(set_data_port): #None on fail
                 board.write_connection_settings(set_data_port) #also counts as success -> save.
@@ -230,10 +230,13 @@ class IMUBoard:
         self.data_connection.readall()  # clear old messages which may be wrong type
         for i in range(4):
             msg = self.read_one_message()
-            debug_print(f"check_data_port message {i}: {msg}")
-            if msg and msg.valid and msg.msgtype in [b'CAL', b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']:
-                #print("True")
+            debug_print(f"check_data_port message {i}: {msg}, type {type(msg)}")
+            if msg and hasattr(msg, "valid") and msg.valid and msg.msgtype in [b'CAL', b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']:
+                debug_print("Check passes, break")
                 check_success = True
+                break
+            debug_print("check fail, retry")
+
         #change uart or odr back if changed.
         if changed_odr:
             self.set_cfg_flash({"odr": b"0"})
@@ -265,7 +268,7 @@ class IMUBoard:
 
     # with no cached value - auto connect by trying baud 921600 for all ports first, then other bauds
     def auto_no_cache(self, set_data_port=True):
-        #print("\n_____auto no cache_____")
+        debug_print("\n_____auto no cache_____")
         bauds = ALLOWED_BAUD.copy() #already in preferred order
         for baud in bauds:
             outcome = self.auto_port(baud, set_data_port)
@@ -292,10 +295,12 @@ class IMUBoard:
                         pid = self.get_pid().pid  # TODO - handle errors and retry?
                         if (b'EVK' in pid) or (b'A1' in pid) or (b'A-1' in pid):
                             #EVK case, including old EVK pid variations: subtract 3.
+                            debug_print("EVK: subtract 3 from config port to get data port")
                             data_port = self.compute_data_port()
                             self.data_connection = SerialConnection(data_port, baud)
                         #if b'GNSS' in pid or b'IMU' in pid:
                         else:
+                            debug_print("not EVK: identify data port by output messages")
                             #pick the port which outputs IMU or CAL - but won't work if odr 0, and could get a different unit.
                             data_port = self.find_data_port_gnss_imu() #this finds and connects, don't need to set self.data_connection
                             #print(f"data port was {data_port}")
@@ -307,7 +312,7 @@ class IMUBoard:
                 else:
                     self.release_connections()
             except Exception as e:
-                #print("skipping over port " + control_port + " with error: " + str(e))
+                debug_print("skipping over port " + control_port + " with error: " + str(e))
                 self.release_connections()
                 continue
         # no ports worked - clean up and report fail
@@ -341,7 +346,7 @@ class IMUBoard:
         #     self.data_scheme = RTCM_Scheme()
         
         for possible_data_port in all_ports:
-            debug_print(f"looking for data port at {possible_data_port}, data scheme is {self.data_scheme}")
+            debug_print(f"looking for data port at {possible_data_port}")
             if self.connect_data_port(possible_data_port, self.baud): #230400):  #TODO: 2300400 baud for GNSS - or should it use self.baud?
                 if self.check_data_port():
                     dataPortNum = possible_data_port
@@ -444,16 +449,19 @@ class IMUBoard:
         attempt_count = 0 
         while message == None or message.__dict__ == {}: 
             if hasattr(self, "msg_format") and self.msg_format == b"4" and hasattr(self.data_connection, "sock"):
-                #   When UDP and RTCM is use we can only get message this way 
+                #   When UDP and RTCM is use we can only get message this way
+                debug_print("read from data_connection.sock")
                 message = self.data_scheme.read_one_message(self.data_connection.sock)
             else:
+                print("read from data_connection (not sock)")
                 message = self.data_scheme.read_one_message(self.data_connection)
-            if debug: print(message)
+            #if debug: print(f"read_one_message reads: {message}")
             if attempt_count >= num_attempts:
                 debug_print(f"attempt count: {attempt_count}")
                 break
             attempt_count += 1
 
+        #debug_print(f"read_one_message result: {message} with message.__dict__ = {message.__dict__}")
         return message
 
     # send a message on the control channel
