@@ -17,9 +17,6 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from user_program_config import *
     from version_num import PROGRAM_VERSION
     from ioloop import *
-    import PySimpleGUI as sg
-    from convertLog import export_logs_detect_format# TODO - put under src directory?
-    from map.geotiler_demo import draw_map, draw_dial
     import random
     import io
     try: #get pylru if possible, otherwise will use dictionary
@@ -31,9 +28,15 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     sys.path.append(parent_dir+'/src')
     from tools import *
 
+    if USE_GRAPHICS:
+        import PySimpleGUI as sg
+        from map.geotiler_demo import draw_map, draw_dial
+        from file_picking import pick_one_file, pick_multiple_files
+        from convertLog import export_logs_detect_format  # TODO - put under src directory?
+
     import re
     import traceback
-    from file_picking import pick_one_file, pick_multiple_files
+
 
 
 #interface for A1 configuration and logging
@@ -87,7 +90,14 @@ class UserProgram:
                 clear_screen()
                 self.show_info()
                 print("\nSelect One:")
-                action = MENU_OPTIONS[cutie.select(MENU_OPTIONS)]
+
+                allowed_menu_options = MENU_OPTIONS.copy()
+                if not USE_GRAPHICS:
+                    allowed_menu_options.remove("Monitor")
+                    allowed_menu_options.remove("Firmware Update")
+
+                action = allowed_menu_options[cutie.select(allowed_menu_options)]
+
                 if action == "Connect":
                     self.connect()
                 elif action == "Unit Configuration":
@@ -561,11 +571,15 @@ class UserProgram:
     def log(self):
         clear_screen()
         self.show_logging()
-        actions = ["Export to CSV", "cancel"]
+
+        actions = ["cancel"]
+        if USE_GRAPHICS:
+            actions = ["Export to CSV"] + actions
         if self.log_on.value:
             actions = ["Stop"]+actions
         else:
             actions = ["Start"] + actions
+
         selected_action = actions[cutie.select(actions)]
         if selected_action == "Export to CSV":
             print("\nSelect logs in the file picker window")
@@ -588,7 +602,7 @@ class UserProgram:
             show_and_pause("must connect before logging")
             return
         else:
-            suggested = collector.default_log_name(self.serialnum)
+            suggested = default_log_name(self.serialnum)
             options = ["default: " + suggested, "other"]
             print("\nFile name:")
             selected_option = cutie.select(options)
@@ -704,6 +718,10 @@ class UserProgram:
         self.ntrip_stop.value = 1
 
     def monitor(self):
+        if not USE_GRAPHICS:
+            show_and_pause("\nno monitor when USE_GRAPHICS flag is false")
+            return
+
         if not self.board:
             show_and_pause("connect before monitoring")
             return
@@ -1217,7 +1235,7 @@ class UserProgram:
                     self.stop_logging()
                 else:
                     #start log with default name
-                    logname = collector.default_log_name(self.serialnum)
+                    logname = default_log_name(self.serialnum)
                     self.log_name.value = logname.encode()
                     self.log_on.value = 1
                     self.log_start.value = 1
@@ -1744,6 +1762,19 @@ def form_aln_string_prompt():
     pitch_angle = cutie.get_number(prompt="pitch adjustment (degrees): ", min_value=-360, max_value=360, allow_float=True)
     heading_angle = cutie.get_number(prompt="heading adjustment (degrees): ", min_value=-360, max_value=360, allow_float=True)
     return f"{roll_angle:+.6f}{pitch_angle:+.6f}{heading_angle:+.6f}"
+
+
+def default_log_name(serialNum = None):
+    #time_str = time.ctime(time.time()).replace(" ", "_").replace(":", "_")
+    local = time.localtime()
+    date_nums = [local.tm_year, local.tm_mon, local.tm_mday]
+    time_nums = [local.tm_hour, local.tm_min, local.tm_sec]
+    date_str = "date_" + "_".join([str(num).zfill(2) for num in date_nums])
+    time_str = "time_" + "_".join([str(num).zfill(2) for num in time_nums])
+    if serialNum is None:
+        return "output_" + date_str + "_" + time_str + LOG_FILETYPE
+    else:
+        return "output_" + date_str + "_" + time_str + "_SN_"+str(serialNum) + LOG_FILETYPE
 
 
 #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)

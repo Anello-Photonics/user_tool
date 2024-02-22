@@ -1,7 +1,7 @@
 #__________Main user program configs__________:
 DEBUG = False
-import time
-
+USE_GRAPHICS = False
+LOG_FILETYPE = ".txt"
 
 def debug_print(text):
     if DEBUG:

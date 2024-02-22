@@ -7,7 +7,6 @@ try:  # importing from inside the package
     from binary_scheme import Binary_Scheme
     from connection import SerialConnection, FileReaderConnection, FileWriterConnection, UDPConnection
     from board import IMUBoard
-    from collector import Collector, SessionStatistics, RealTimePlot
 except ModuleNotFoundError:  # importing from outside of the package
     import tools.message_scheme
     from tools.message_scheme import Message
@@ -17,4 +16,3 @@ except ModuleNotFoundError:  # importing from outside of the package
     from tools.binary_scheme import Binary_Scheme
     from tools.connection import SerialConnection, FileReaderConnection, FileWriterConnection, UDPConnection
     from tools.board import IMUBoard
-    from tools.collector import Collector, SessionStatistics, RealTimePlot
