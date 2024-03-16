@@ -39,33 +39,36 @@ ERROR_CODES = {
 
 #dictionary of user config codes to names. TODO - use a bidict for two way lookup?
 CFG_CODES_TO_NAMES = {
-    "odr":    "Output Data Rate (Hz)                   ",
-    "orn":    "Orientation                             ",
-    "aln":    "Alignment Angles                        ",
-    "gps1":   "Enable GPS 1                            ",
-    "gps2":   "Enable GPS 2                            ",
-    "odo":    "Odometer                                ",
-    "fog":    "Enable FOG                              ", #TODO - remove this? may not do anything.
-    "dhcp":   "DHCP (Auto Assign IP)                   ",
-    "lip":    "UDP A-1 IP                              ",
-    "rip":    "UDP Computer IP                         ",
-    "rport1": "UDP Computer Data Port                  ",
-    "rport2": "UDP Computer Configuration Port         ",
-    "rport3": "UDP Computer Odometer Port              ",
-    "mfm":    "Message Format                          ",
-    "uart":   "Serial Output                           ",
-    "eth":    "Ethernet Output                         ",
-    "sync":   "Time Sync                               ",
-    "ptp":    "PTP Mode                                ",
-    "lpa":    "Acceleration Low Pass Filter Cutoff (Hz)",
-    "lpw":    "MEMS Gyro Low Pass Filter Cutoff (Hz)   ",
-    "lpo":    "Optical Gyro Low Pass Filter Cutoff (Hz)",
-    "min":    "Configuration Print Interval (minutes)  ", #TODO - do we want to show this?
-    "ntrip":  "NTRIP Input Channel                     ",
-    "nmea":   "NMEA GGA output                         ",
+    "odr":          "Output Data Rate (Hz)                   ",
+    "bau":          "Output Baud rate                        ",
+    "bau_input":    "Configuration Baud rate                 ",
+    "orn":          "Orientation                             ",
+    "aln":          "Alignment Angles                        ",
+    "gps1":         "Enable GPS 1                            ",
+    "gps2":         "Enable GPS 2                            ",
+    "odo":          "Odometer                                ",
+    "fog":          "Enable FOG                              ", #TODO - remove this? may not do anything.
+    "dhcp":         "DHCP (Auto Assign IP)                   ",
+    "lip":          "UDP A-1 IP                              ",
+    "rip":          "UDP Computer IP                         ",
+    "rport1":       "UDP Computer Data Port                  ",
+    "rport2":       "UDP Computer Configuration Port         ",
+    "rport3":       "UDP Computer Odometer Port              ",
+    "mfm":          "Message Format                          ",
+    "uart":         "Serial Output                           ",
+    "eth":          "Ethernet Output                         ",
+    "sync":         "Time Sync                               ",
+    "ptp":          "PTP Mode                                ",
+    "lpa":          "Acceleration Low Pass Filter Cutoff (Hz)",
+    "lpw":          "MEMS Gyro Low Pass Filter Cutoff (Hz)   ",
+    "lpo":          "Optical Gyro Low Pass Filter Cutoff (Hz)",
+    "min":          "Configuration Print Interval (minutes)  ", #TODO - do we want to show this?
+    "ntrip":        "NTRIP Input Channel                     ",
+    "nmea":         "NMEA messages enabled                   ",
+    "nmea_rate":    "NMEA output rate (Hz)                   ",
 }
 
-#UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
+# UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
 UDP_FIELDS = ["dhcp", "lip", "rip", "rport1", "rport2"]
 
 # suggestions on what you can enter. only for type in options
@@ -93,7 +96,8 @@ CFG_VALUE_OPTIONS = {
     "sync": ["on", "off"],
     "ntrip": ["0", "1", "2"],
     "ptp":  ["off", "master", "slave"],
-    "nmea": ["0", "1"],
+    "nmea": ["0", "1", "2", "3", "4", "5", "6", "7"],
+    "nmea_rate": ["1", "2", "4", "5"],
 }
 
 CFG_VALUE_NAMES = {
