@@ -115,8 +115,6 @@ CFG_VALUE_NAMES = {
     ("ntrip", "0"): "off",
     ("ntrip", "1"): "serial",
     ("ntrip", "2"): "ethernet",
-    ("nmea", "0"): "off",
-    ("nmea", "1"): "on",
     ("orn", "+X+Y+Z"): "+X+Y+Z (Forward-Right-Down)",  # give special names to the two most common orientations.
     ("orn", "+Y+X-Z"): "+Y+X-Z (Right-Forward-Up)",
 }

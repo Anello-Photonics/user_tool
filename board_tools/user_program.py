@@ -399,6 +399,8 @@ class UserProgram:
         if code == "aln":
             print("\nEnter alignment angles")
             value = form_aln_string_prompt()
+        elif code == "nmea":
+            value = form_nmea_value_prompt()
         elif code in CFG_VALUE_OPTIONS:
             print("\nselect " + name)
             value_options = CFG_VALUE_OPTIONS[code].copy()
@@ -447,13 +449,19 @@ class UserProgram:
             if 'aln' in configs_dict and not version_greater_or_equal(self.version, "1.2.0"):
                 del(configs_dict['aln'])
 
+            #TODO - print the configs in order of CFG_CODES_TO_NAMES,
+            # and put available_configs in that order too? maybe not needed
+
             self.available_configs = list(configs_dict.keys())
             print("Unit Configurations:")
             for cfg_field_code in configs_dict:
                 if cfg_field_code in CFG_CODES_TO_NAMES:
                     full_name = CFG_CODES_TO_NAMES[cfg_field_code]
                     value_code = configs_dict[cfg_field_code].decode()
-                    value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
+                    if cfg_field_code == "nmea":
+                        value_name = show_nmea_flags_value(value_code)
+                    else:
+                        value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
@@ -1744,6 +1752,36 @@ def form_aln_string_prompt():
     pitch_angle = cutie.get_number(prompt="pitch adjustment (degrees): ", min_value=-360, max_value=360, allow_float=True)
     heading_angle = cutie.get_number(prompt="heading adjustment (degrees): ", min_value=-360, max_value=360, allow_float=True)
     return f"{roll_angle:+.6f}{pitch_angle:+.6f}{heading_angle:+.6f}"
+
+
+def form_nmea_value_prompt():
+    value_codes_to_numbers = ({"on": 1, "off": 0})
+    value_codes = list(value_codes_to_numbers.keys())
+    combined_number = 0
+
+    print("\nPick on/off for each NMEA message:")
+    for position, name in readable_scheme_config.NMEA_BIT_POSITIONS.items():
+        print(f"\n{name}")
+        chosen = value_codes[cutie.select(value_codes)]
+        if chosen == "on":  # or could add pow(2, position) * (zero or 1)
+            combined_number += pow(2, position)
+    return str(int(combined_number))
+
+
+# split 0-7 code into the 3 on/off flags, then print each separately.
+def show_nmea_flags_value(number_code):
+    try:
+        number_code = int(number_code)
+    except Exception as e:
+        return number_code
+
+    out_str = ""
+    for position, name in readable_scheme_config.NMEA_BIT_POSITIONS.items():
+        # find that bit using bitwise and with power of two
+        power = pow(2, position)
+        zero_or_one = int((number_code & power)/power)
+        out_str += f"{name}: {'on' if zero_or_one == 1 else 'off'}  "
+    return out_str
 
 
 #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)

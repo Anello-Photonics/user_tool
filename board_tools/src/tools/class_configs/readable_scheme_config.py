@@ -317,6 +317,8 @@ VEH_VALUE_NAMES = {
     ("bcal", "0"): "Complete",
 }
 
+NMEA_BIT_POSITIONS = {0: "GGA", 1: "GSA", 2: "RMC"}
+
 ERROR_CODES = {
     1: "No start character",
     2: "Missing r/w for config",
