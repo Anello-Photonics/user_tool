@@ -1573,9 +1573,16 @@ class UserProgram:
 
     # send regular reset, not bootloading reset
     def reset(self):
+
+        # use "input baud" config if exists, or fall back on "baud" config
+        get_bau_list = self.board.retry_get_cfg_flash(["bau_input"])
+        if get_bau_list is None:
+            get_bau_list = self.board.retry_get_cfg_flash(["bau"])
+        startup_baud = get_bau_list[0]
+        
         if self.board:
             print("\nrestarting")
-            self.board.reset_with_waits() #reset, then wait and ping until responsive.
+            self.board.reset_with_waits(new_baud=startup_baud)  # reset, then wait and ping until responsive.
         else:
             show_and_pause("must connect to unit before resetting")
 
