@@ -40,8 +40,8 @@ ERROR_CODES = {
 #dictionary of user config codes to names. TODO - use a bidict for two way lookup?
 CFG_CODES_TO_NAMES = {
     "odr":          "Output Data Rate (Hz)                   ",
-    "bau":          "Output Baud rate                        ",
-    "bau_input":    "Configuration Baud rate                 ",
+    "bau":          "Data Port Baud Rate                     ",
+    "bau_input":    "Config Port Baud Rate                   ",
     "orn":          "Orientation                             ",
     "aln":          "Alignment Angles                        ",
     "gps1":         "Enable GPS 1                            ",
