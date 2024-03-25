@@ -86,8 +86,8 @@ CFG_VALUE_OPTIONS = {
     "orn": ["+X+Y+Z", "+Y+X-Z", "-X-Y+Z", "+Y-X+Z", "-Y+X+Z", "+X-Y-Z", "-X+Y-Z", "-Y-X-Z"],
     "mfm": ["1", "4", "0"], #1 = ASCII, 4 = RTCM. see CFG_VALUE_NAMES
     "odr": ["20", "50", "100", "200"],
-    "bau": ["19200", "57600", "115200", "230400", "460800", "921600"],
-    "bau_input": ["19200", "57600", "115200", "230400", "460800", "921600"],
+    "bau": ["921600", "460800", "230400", "115200", "57600", "19200"], # TODO get from ALLOWED_BAUDS_SORTED?
+    "bau_input": ["921600", "460800", "230400", "115200", "57600", "19200"], # TODO get from ALLOWED_BAUDS_SORTED?
     "gps1": ["on", "off"],
     "gps2": ["on", "off"],
     "odo": ["mps", "mph", "kph", "fps"],
