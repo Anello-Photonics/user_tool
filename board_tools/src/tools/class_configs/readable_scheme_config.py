@@ -304,6 +304,7 @@ VEH_FIELDS = {
     "Baseline Calibration": "bcal",
     "Ticks per rev ": "tic",
     "Wheel radius  ": "rad",
+    "GPS accuracy floor (m)": "rmin",
 }
 
 VEH_VALUE_OPTIONS = {
