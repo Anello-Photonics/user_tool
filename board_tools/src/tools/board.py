@@ -1034,7 +1034,7 @@ class IMUBoard:
                     return
                 value = value_options[chosen_index].encode()
             else:
-                value = input(grouping + ": ").encode()
+                value = input().encode()
             args[grouping] = value
 
         write_success = self.retry_set_veh_flash(args)
