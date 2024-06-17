@@ -232,7 +232,7 @@ FORMAT_ODO = [
 
 #most of these can be blank if not initialized
 FORMAT_INS = [
-    ("imu_time_ms", int),
+    ("imu_time_ms", float),
     ("gps_time_ns", int),
     ("ins_solution_status", int), #was heading_initialized
     ("lat_deg", float),
@@ -249,7 +249,7 @@ FORMAT_INS = [
 
 #for old A1 firmware, INS message has extra comma when position not initialized
 FORMAT_INS_EXTRA_COMMA = [
-    ("imu_time_ms", int),
+    ("imu_time_ms", float),
     ("gps_time_ns", int),
     ("extra comma", int), #for the extra comma
     ("ins_solution_status", int),
