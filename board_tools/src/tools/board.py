@@ -961,9 +961,10 @@ class IMUBoard:
             allowed_configs = list(read_configs.keys())
 
         # choose which vehicle config to set, only give options from allowed_configs
-        allow_veh_fields = VEH_FIELDS.copy()
-        for name, code_or_tuple in VEH_FIELDS.items():
-            if code_or_tuple in ["bsl", "bcal"]:
+        allow_veh_fields = VEH_FIELDS_MAIN.copy()
+        for name, code_or_tuple in VEH_FIELDS_MAIN.items():
+            # skip bcal since antenna baseline has its own menu which sets bsl and bcal.
+            if code_or_tuple == "bcal":
                 try:
                     del(allow_veh_fields[name])  # skip these, will handle separately
                 except KeyError:
@@ -982,8 +983,6 @@ class IMUBoard:
                     pass
 
         options = list(allow_veh_fields.keys())
-        if ("bsl" in allowed_configs) and ("bcal" in allowed_configs):
-            options += ["Antenna Baseline"]  # one combined name for both
         options += ["cancel"]
 
         print("\nselect configurations to write\n")
@@ -994,7 +993,7 @@ class IMUBoard:
         # enter the components of the chosen config
         print(f"\nEnter {chosen}:")
         args = {}  # dict of VEH to write
-        grouping = VEH_FIELDS[chosen]
+        grouping = VEH_FIELDS_MAIN[chosen]
 
         # combined menu for bsl and bcal
         if grouping == "bsl":
@@ -1015,6 +1014,32 @@ class IMUBoard:
                 args["bcal"] = b'1'
             elif bsl_chosen == lever_arm_text:
                 args["bcal"] = b'2'
+
+        # menu for zupt calibration
+        elif grouping == "zcal":
+            manually_text = "Enter manually"
+            auto_text = "Auto calibrate"
+            reset_text = "Reset"
+            cancel_text = "cancel"
+            baseline_options = [manually_text, auto_text, reset_text, cancel_text]
+            chosen_option = baseline_options[cutie.select(baseline_options)]
+            if chosen_option == cancel_text:
+                return
+            elif chosen_option == manually_text:
+                # prompt for all the zupt fields
+                for zupt_field_name, zupt_field_codes in VEH_ZUPT_FIELDS.items():
+                    if type(zupt_field_codes) is tuple:
+                        print(zupt_field_name)
+                        for axis, sub_code in zupt_field_codes:
+                            value = input(f"{axis}: ").encode()
+                            args[sub_code] = value
+                    else:
+                        value = input(zupt_field_name + ": ").encode()
+                        args[zupt_field_codes] = value
+            elif chosen_option == auto_text:
+                args["zcal"] = b'1'
+            elif chosen_option == reset_text:
+                args["zcal"] = b'3'
 
         # grouping like x/y/z parts: ask for each of them
         elif type(grouping) is tuple:
@@ -1052,11 +1077,24 @@ class IMUBoard:
             # if proper_response(resp, b'VEH'):
             out_str = "\nVehicle Configurations:  (all vectors in meters with center of ANELLO unit as origin)"
 
-            for name, grouping in VEH_FIELDS.items():
+            for name, grouping in VEH_FIELDS_ALL.items():
 
                 # don't show baseline calibration here, since we have separate print for calibration in progress.
                 if grouping == "bcal":
                     continue
+
+                # number of decimal places
+                if grouping in ["zacct", "zangt"]:
+                    # accel and rate counters are integer
+                    decimal_places = 0
+                elif grouping in ["zmmps", "zsmps"]:
+                    # accels: show 4 places
+                    decimal_places = 4
+                elif name in VEH_ZUPT_FIELDS:
+                    # catchall for zupt fields, currently is the gyro mean and threshold x,y,z
+                    decimal_places = 5
+                else:
+                    decimal_places = 3
 
                 # tuple means multi-part like x/y/z: show all in one line, blank any missing
                 if type(grouping) is tuple:
@@ -1069,7 +1107,7 @@ class IMUBoard:
                             # show the name if there is one
                             named_value = VEH_VALUE_NAMES.get((code, raw_val), raw_val)
                             has_any_axis = True
-                        line += f"{axis}: {truncate_decimal(named_value, 3)}    "
+                        line += f"{axis}: {truncate_decimal(named_value, decimal_places)}    "
                     # show the x,y,z grouping only if at least one was in the read.
                     if has_any_axis:
                         out_str += line
@@ -1083,7 +1121,7 @@ class IMUBoard:
                     if grouping == "bcal" and raw_val != "0":
                         named_value = f"In Progress ({named_value})"
 
-                    line = f"\n    {name}: {truncate_decimal(named_value, 3)}"
+                    line = f"\n    {name}: {truncate_decimal(named_value, decimal_places)}"
                     out_str += line
             return out_str
         else:

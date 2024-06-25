@@ -295,7 +295,7 @@ HEADING_FLAGS = {
 }
 
 # put VEH options here so VEH methods can go in IMUBoard. originally in user_program_config.py
-VEH_FIELDS = {
+VEH_FIELDS_MAIN = {
     "GPS Antenna 1    ": (("x", "g1x"), ("y", "g1y"), ("z", "g1z")),
     "GPS Antenna 2    ": (("x", "g2x"), ("y", "g2y"), ("z", "g2z")),
     "Rear Axle Center ": (("x", "cnx"), ("y", "cny"), ("z", "cnz")),
@@ -305,17 +305,35 @@ VEH_FIELDS = {
     "Ticks per rev ": "tic",
     "Wheel radius  ": "rad",
     "GPS accuracy floor (m)": "rmin",
+    "Zupt calibration    ": "zcal",
 }
 
 VEH_VALUE_OPTIONS = {
     "bcal": ["1", "2", "99"]  # allow setting 0/None?
 }
 
+# will put these in a sub-menu of vehicle configs, not main veh menu.
+VEH_ZUPT_FIELDS = {
+    "Zupt Accel Mean     ": "zmmps",
+    "Zupt Accel Threshold": "zsmps",
+    "Zupt Gyro Mean      ": (("x", "zmrpsx"), ("y", "zmrpsy"), ("z", "zmrpsz")),
+    "Zupt Gyro Threshold ": (("x", "zsrpsx"), ("y", "zsrpsy"), ("z", "zsrpsz")),
+    "Zupt Accel Count    ": "zacct",
+    "Zupt Gyro Count     ": "zangt",
+}
+
+# combined dictionary, to show in read veh configs menu
+VEH_FIELDS_ALL = VEH_FIELDS_MAIN.copy()
+VEH_FIELDS_ALL.update(VEH_ZUPT_FIELDS)
+
 VEH_VALUE_NAMES = {
     ("bcal", "1"): "Auto calibrate",
     ("bcal", "2"): "From lever arms",
     ("bcal", "99"): "Reset",
     ("bcal", "0"): "Complete",
+    ("zcal", "0"): "Complete",
+    ("zcal", "1"): "Calibrating",
+    ("zcal", "3"): "Reset",
 }
 
 ERROR_CODES = {
