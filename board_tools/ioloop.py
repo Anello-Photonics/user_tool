@@ -167,7 +167,7 @@ def log_path():
     return os.path.join("..", "logs", month_dir, day_dir)
 
 def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
-            con_type, com_port, com_baud, udp_ip, udp_port, gps_received,
+            con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
             log_on, log_start, log_stop, log_name,
             ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
             ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -235,7 +235,7 @@ def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
                 debug_print("io_loop con start")
                 if con_type.value == b"COM":
                     debug_print("io_loop connect COM")
-                    data_connection = SerialConnection(com_port.value.decode(), com_baud.value)
+                    data_connection = SerialConnection(com_port.value.decode(), data_port_baud.value)
                 elif con_type.value == b"UDP":
                     debug_print("io_loop connect UDP")
                     data_connection = UDPConnection(udp_ip.value.decode(), UDP_LOCAL_DATA_PORT, udp_port.value)
@@ -367,7 +367,7 @@ def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
                             elif last_msg.msgtype == b'INS':
                                 last_ins_msg.value = part #send valid INS message to monitor
                                 #debug_print(f"\nlast_ins_msg {type(parse_scheme)}:\n{last_msg}")
-                            elif last_msg.msgtype in [b'IMU', b'IM1']:
+                            elif last_msg.msgtype in [b'IMU', b'IM1', b'IMX']:
                                 last_imu_time.value = last_msg.imu_time_ms
                                 last_imu_msg.value = part #send valid IMU message to monitor
                                 #debug_print(f"\nlast_imu_msg {type(parse_scheme)}:\n{last_msg}")

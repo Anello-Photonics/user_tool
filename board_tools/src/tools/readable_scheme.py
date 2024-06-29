@@ -30,6 +30,18 @@ def extract_flags_HDG(message):
         setattr(message, "carrSoln", 2*message.carrSoln_bit2 + message.carrSoln_bit1) #TODO - is this the right bit order or backwards?
 
 
+# convert the aln user config, such as "+0.00000-1.123456+3.234000" into 3 floats which are easier to compare.
+def split_aln_string(aln_string):
+    if type(aln_string) is bytes:
+        aln_string = aln_string.decode()
+    # put comma before each + or - sign, then split on those, preserving the sign.
+    comma_separated = aln_string.replace("+", ",+").replace("-", ",-")
+    parts = comma_separated.split(",")
+    try:
+        return [float(parts[i]) for i in [1, 2, 3]]  # first part is empty, next parts are the numbers.
+    except Exception as e:  # could have exceptions on wrong aln string format
+        return None
+
 #messages encoded in readable form with start and end codes, comma separted values
 class ReadableScheme(Scheme):
     
@@ -166,6 +178,8 @@ class ReadableScheme(Scheme):
             b'INS': self.set_payload_fields_INS,
             b'VEH': self.set_payload_fields_with_names,
             b'SEN': self.set_payload_fields_with_names,
+            b'INI': self.set_payload_fields_INI_UPD,
+            b'UPD': self.set_payload_fields_INI_UPD,
         }
         decoderFunc = decoders.get(msgtype)
         if decoderFunc:
@@ -191,6 +205,8 @@ class ReadableScheme(Scheme):
             b'PNG': self.build_payload_no_fields,
             b'ECH': self.build_payload_ECH,
             b'ODO': self.build_payload_fields_ODO,
+            b'INI': self.build_payload_INI_UPD,
+            b'UPD': self.build_payload_INI_UPD,
         }
         encoderFunc = encoders.get(msgtype)
         if encoderFunc:
@@ -203,7 +219,7 @@ class ReadableScheme(Scheme):
         #this relies on each format having different length.
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
 
-        for msg_format in [FORMAT_IMU_WITH_SYNC, FORMAT_IMU_NO_SYNC, FORMAT_IMU_3FOG]:
+        for msg_format in [FORMAT_IMU_WITH_SYNC, FORMAT_IMU_NO_SYNC, FORMAT_IMU_X3, FORMAT_IMU_3FOG]:
             if num_commas == len(msg_format) - 1:
                 self.set_fields_from_list(message, msg_format, payload)
                 break
@@ -216,10 +232,6 @@ class ReadableScheme(Scheme):
     def set_payload_fields_IM1(self, message, payload):
         self.set_fields_from_list(message, FORMAT_IM1, payload)
 
-        
-    # def set_payload_fields_IM2(self, message, payload):
-    #     self.set_fields_from_list(message, FORMAT_IM2, payload)
-
     def set_payload_fields_INS(self, message, payload):
         # check with format by number of commas. num commas = num fields - 1
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
@@ -231,6 +243,16 @@ class ReadableScheme(Scheme):
         else:
             message.valid = False
             message.error = f"unexpected length for INS: {num_commas}"
+
+        # carrier solution >= 8 means GPS off. separate into two attributes.
+        if hasattr(message, "ins_solution_status_and_gps_used"):
+            status_and_gps = message.ins_solution_status_and_gps_used
+            if 255 > status_and_gps >= 8:
+                message.ins_solution_status = status_and_gps - 8
+                message.gps_used = False
+            else:
+                message.ins_solution_status = status_and_gps
+                message.gps_used = True
 
     def set_payload_fields_GPS(self, message, payload):
         self.set_fields_from_list(message, FORMAT_GPS, payload)
@@ -255,6 +277,25 @@ class ReadableScheme(Scheme):
         for i in range(0, len(separated), 2):
             cfg_name = separated[i].decode()
             cfg_value = separated[i+1]
+            configurations[cfg_name] = cfg_value
+        message.configurations = configurations
+
+    def set_payload_fields_INI_UPD(self, message, payload):
+        separated = payload.split(READABLE_PAYLOAD_SEPARATOR)
+        configurations = {}
+
+        # if first value is a number, treat it as timestamp, rest are name1,value1,name2,value2
+        # not number start -> go straight to name,value,name,value
+        try:
+            timestamp = float(separated[0])
+            configurations["timestamp"] = timestamp
+            remaining_fields = separated[1:]
+        except ValueError as e:
+            remaining_fields = separated
+
+        for i in range(0, len(remaining_fields), 2):
+            cfg_name = remaining_fields[i].decode()
+            cfg_value = remaining_fields[i+1]
             configurations[cfg_name] = cfg_value
         message.configurations = configurations
 
@@ -327,13 +368,15 @@ class ReadableScheme(Scheme):
 
     def build_payload_fields_ODO(self, message):
         return str(message.speed).encode()
-    
-    def build_payload_INI(self, message):
-        payload = b""
-        payload += message.mode
-        payload += READABLE_PAYLOAD_SEPARATOR
-        payload += str(message.value).encode()
-        return payload
+
+    # Combined INI and UPD function since they have the same fields.
+    # use key1,value1,key2,value2... like APCFG
+    def build_payload_INI_UPD(self, message):
+        data = b""
+        for name, val in message.configurations.items():
+            assert name in INI_UPD_FIELDS, f"unexpected init or update field: {name}"
+            data += name.encode() + READABLE_PAYLOAD_SEPARATOR + val.encode() + READABLE_PAYLOAD_SEPARATOR
+        return data[:-1]  # remove ending comma
 
     # get fields based on config with the correct type like int, float, bytes
     def set_fields_from_list(self, message, format_list, data):

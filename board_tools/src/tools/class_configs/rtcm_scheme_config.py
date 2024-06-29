@@ -206,5 +206,5 @@ RTCM_INS_PAYLOAD_FIELDS = [
     ("pitch_deg", "i", 1e-5), #pitch_frac_deg
     ("heading_deg", "i", 1e-5), #head_frac_deg
     ("zupt_flag", "B"), #zupt_flag
-    ("ins_solution_status", "B") #status
+    ("ins_solution_status_and_gps_used", "B") #status
 ]

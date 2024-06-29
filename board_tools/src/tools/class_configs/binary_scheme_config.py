@@ -62,9 +62,9 @@ BINARY_FORMAT_IMU = [
     ("accel_x_g", "int16", 0.0000305),  # also scaled by the accel range
     ("accel_y_g", "int16", 0.0000305),
     ("accel_z_g", "int16", 0.0000305),
-    ("angrate_x_dps", "int16", 0.0000305),  # also scaled by the rate range
-    ("angrate_y_dps", "int16", 0.0000305),
-    ("angrate_z_dps", "int16", 0.0000305),
+    ("angrate_x_dps", "int16", 0.000035),  # also scaled by the rate range
+    ("angrate_y_dps", "int16", 0.000035),
+    ("angrate_z_dps", "int16", 0.000035),
     ("fog_angrate_z_dps", "int32", 1.0/10000000.0), #TODO - will there be a version with fog x/y rates too?
     ("odometer_speed_mps", "int16", 1.0/100),
     ("temperature_c", "int16", 1.0/100.0),
@@ -85,7 +85,7 @@ BINARY_FORMAT_INS = [
     ("pitch_deg", "int16", 1.0/100),
     ("heading_deg", "int16", 1.0/100),
     ("zupt_flag", "uint8"),
-    ("ins_solution_status", "uint8"), #was "status" in the documentation - is it ins_solution_status?
+    ("ins_solution_status_and_gps_used", "uint8"),
 ]
 
 BINARY_FORMAT_GPS = [

@@ -17,8 +17,16 @@ MENU_OPTIONS = [
     "Log",
     "Monitor",
     "NTRIP",
+    "Send Inputs",
     "Firmware Update",
     #"Plot", # put this back in menu when implemented
+    "Exit"
+]
+
+MENU_OPTIONS_WHEN_DISCONNECTED = [
+    "Refresh",
+    "Connect",
+    "Log",  # can do log -> export when not connected, but not start a log.
     "Exit"
 ]
 
@@ -37,35 +45,40 @@ ERROR_CODES = {
     11: "Feature Disabled"
 }
 
-#dictionary of user config codes to names. TODO - use a bidict for two way lookup?
+# dictionary of user config codes to names. TODO - use a bidict for two way lookup?
 CFG_CODES_TO_NAMES = {
-    "odr":    "Output Data Rate (Hz)                   ",
-    "orn":    "Orientation                             ",
-    "aln":    "Alignment Angles                        ",
-    "gps1":   "Enable GPS 1                            ",
-    "gps2":   "Enable GPS 2                            ",
-    "odo":    "Odometer                                ",
-    "fog":    "Enable FOG                              ", #TODO - remove this? may not do anything.
-    "dhcp":   "DHCP (Auto Assign IP)                   ",
-    "lip":    "UDP A-1 IP                              ",
-    "rip":    "UDP Computer IP                         ",
-    "rport1": "UDP Computer Data Port                  ",
-    "rport2": "UDP Computer Configuration Port         ",
-    "rport3": "UDP Computer Odometer Port              ",
-    "mfm":    "Message Format                          ",
-    "uart":   "Serial Output                           ",
-    "eth":    "Ethernet Output                         ",
-    "sync":   "Time Sync                               ",
-    "ptp":    "PTP Mode                                ",
-    "lpa":    "Acceleration Low Pass Filter Cutoff (Hz)",
-    "lpw":    "MEMS Gyro Low Pass Filter Cutoff (Hz)   ",
-    "lpo":    "Optical Gyro Low Pass Filter Cutoff (Hz)",
-    "min":    "Configuration Print Interval (minutes)  ", #TODO - do we want to show this?
-    "ntrip":  "NTRIP Input Channel                     ",
-    "nmea":   "NMEA GGA output                         ",
+    "odr":          "Output Data Rate (Hz)                   ",
+    "bau":          "Data Port Baud Rate                     ",
+    "bau_input":    "Config Port Baud Rate                   ",
+    "orn":          "Orientation                             ",
+    "aln":          "Alignment Angles                        ",
+    "gps1":         "Enable GPS 1                            ",
+    "gps2":         "Enable GPS 2                            ",
+    "odo":          "Odometer                                ",
+    "fog":          "Enable FOG                              ", #TODO - remove this? may not do anything.
+    "dhcp":         "DHCP (Auto Assign IP)                   ",
+    "lip":          "UDP A-1 IP                              ",
+    "rip":          "UDP Computer IP                         ",
+    "rport1":       "UDP Computer Data Port                  ",
+    "rport2":       "UDP Computer Configuration Port         ",
+    "rport3":       "UDP Computer Odometer Port              ",
+    "mfm":          "Message Format                          ",
+    "uart":         "Serial Output                           ",
+    "eth":          "Ethernet Output                         ",
+    "sync":         "Time Sync                               ",
+    "ptp":          "PTP Mode                                ",
+    "lpa":          "Acceleration Low Pass Filter Cutoff (Hz)",
+    "lpw":          "MEMS Gyro Low Pass Filter Cutoff (Hz)   ",
+    "lpo":          "Optical Gyro Low Pass Filter Cutoff (Hz)",
+    "min":          "Configuration Print Interval (minutes)  ",
+    "nhc":          "Non-Holonomic Constraint                ",
+    "ntrip":        "NTRIP Input Channel                     ",
+    "nmea":         "NMEA messages enabled                   ",
+    "nmea_rate":    "NMEA output rate (Hz)                   ",
+    "dir_det":      "Forward/Backward Detection              ",
 }
 
-#UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
+# UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
 UDP_FIELDS = ["dhcp", "lip", "rip", "rport1", "rport2"]
 
 # suggestions on what you can enter. only for type in options
@@ -83,6 +96,8 @@ CFG_VALUE_OPTIONS = {
     "orn": ["+X+Y+Z", "+Y+X-Z", "-X-Y+Z", "+Y-X+Z", "-Y+X+Z", "+X-Y-Z", "-X+Y-Z", "-Y-X-Z"],
     "mfm": ["1", "4", "0"], #1 = ASCII, 4 = RTCM. see CFG_VALUE_NAMES
     "odr": ["20", "50", "100", "200"],
+    "bau": ["19200", "57600", "115200", "230400", "460800", "921600"],
+    "bau_input": ["19200", "57600", "115200", "230400", "460800", "921600"],
     "gps1": ["on", "off"],
     "gps2": ["on", "off"],
     "odo": ["mps", "mph", "kph", "fps"],
@@ -91,9 +106,12 @@ CFG_VALUE_OPTIONS = {
     "uart": ["on", "off"],
     "eth": ["on", "off"],
     "sync": ["on", "off"],
+    "nhc": ["0", "2", "7"],
     "ntrip": ["0", "1", "2"],
     "ptp":  ["off", "master", "slave"],
-    "nmea": ["0", "1"],
+    "nmea": ["0", "1", "2", "3", "4", "5", "6", "7"],
+    "dir_det": ['on', 'off'],
+    "nmea_rate": ["1", "2", "4", "5"],
 }
 
 CFG_VALUE_NAMES = {
@@ -106,11 +124,12 @@ CFG_VALUE_NAMES = {
     ("odo", "mph"): "miles per hour",
     ("odo", "kph"): "kilometers per hour",
     ("odo", "fps"): "feet per second",
+    ("nhc", "0"): "car/default",
+    ("nhc", "2"): "agricultural",
+    ("nhc", "7"): "off",
     ("ntrip", "0"): "off",
     ("ntrip", "1"): "serial",
     ("ntrip", "2"): "ethernet",
-    ("nmea", "0"): "off",
-    ("nmea", "1"): "on",
     ("orn", "+X+Y+Z"): "+X+Y+Z (Forward-Right-Down)",  # give special names to the two most common orientations.
     ("orn", "+Y+X-Z"): "+Y+X-Z (Right-Forward-Up)",
 }
@@ -151,7 +170,7 @@ NTRIP_TIMEOUT_SECONDS = 2
 NTRIP_RETRY_SECONDS = 30
 #NTRIP_READ_SIZE = 2048 # how much it reads from caster at once
 NTRIP_MAX_BYTES_PER_INTERVAL = 5000  # don't send in more that this much data per NTRIP_READ_INTERVAL_SECONDS
-NTRIP_MAX_BYTES_PER_WRITE = 1500  # don't send in more that this much data per write
+NTRIP_MAX_BYTES_PER_WRITE = 1400  # don't send in more that this much data per write
 NTRIP_READ_INTERVAL_SECONDS = 1  # interval for NTRIP bytes limit
 MAX_SINGLE_NTRIP_MESSAGE_SIZE = 1400  # max size of a single message to send to caster
 
@@ -164,7 +183,9 @@ EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
 EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
                      "accel_x_g", "accel_y_g", "accel_z_g",
-                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps", "fog_angrate_z_dps",
+                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps",
+                     "fog_angrate_x_dps", "fog_angrate_y_dps", "fog_angrate_z_dps",
+                     "mag_x", "mag_y", "mag_z",
                      "odometer_speed_mps", "odometer_time_ms",
                      "temperature_c"]
 
@@ -182,7 +203,8 @@ EXPORT_GPS_FIELDS = ["imu_time_ms", "gps_time_ns",
 
 EXPORT_GP2_FIELDS = EXPORT_GPS_FIELDS #make them same for now, but name this so it can change later.
 
-EXPORT_INS_FIELDS = ["imu_time_ms", "gps_time_ns", "ins_solution_status",
+EXPORT_INS_FIELDS = ["imu_time_ms", "gps_time_ns",
+                     "ins_solution_status_and_gps_used", "ins_solution_status", "gps_used",
                      "lat_deg", "lon_deg", "alt_m",
                      "velocity_north_mps", "velocity_east_mps", "velocity_down_mps",
                      "roll_deg", "pitch_deg", "heading_deg",
@@ -250,7 +272,7 @@ GPS_FIX_NAMES = {0: "No Fix",
                  3: "3D-Fix",
                  4: "GNSS + Dead Reckoning",
                  5: "Time Only Fix" } #from nav-pvt fix-type: see https://www.u-blox.com/en/docs/UBX-18010854
-INS_SOLN_NAMES = {0: "Attitude Only", 1: "INS (Pos. Only)", 2: "INS (Full Soln.)", 3: "RTK Float", 4: "RTK Fix"}
+INS_SOLN_NAMES = {255: "No Attitude", 0: "Attitude Only", 1: "INS (Pos. Only)", 2: "INS (Full Soln.)", 3: "RTK Float", 4: "RTK Fix"}
 ZUPT_NAMES = {0: "Moving", 1: "Stationary"}
 
 #tab 2: map

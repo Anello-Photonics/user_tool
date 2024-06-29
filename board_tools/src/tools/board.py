@@ -40,11 +40,17 @@ def debug_print(text):
 # abstraction of the board and its inputs and outputs
 class IMUBoard:
     #def __init__(self, data_port=None, control_port=None, baud=DEFAULT_BAUD, data_scheme=RTCM_Scheme(), control_scheme=ReadableScheme(), try_manual=True, timeout=None):
-    def __init__(self, data_port=None, control_port=None, baud=DEFAULT_BAUD, data_scheme=ReadableScheme(), control_scheme=ReadableScheme(), try_manual=True, timeout=None):
+    def __init__(self, data_port=None, control_port=None, baud=DEFAULT_BAUD, data_baud=None, data_scheme=ReadableScheme(), control_scheme=ReadableScheme(), try_manual=True, timeout=None):
+
+        if data_baud is None:
+            data_baud = baud
+
         self.data_scheme = data_scheme
         self.control_scheme = control_scheme
+        self.control_baud = baud
+        self.data_baud = data_baud
         self.timeout = timeout
-        success = self.connect_to_ports(data_port, control_port, baud)
+        success = self.connect_to_ports(data_port, control_port, control_baud=baud, data_baud=data_baud)
         if try_manual and not success:
             print("failed to connect with control port = "+str(control_port)+", data port = "+str(data_port)+", baud = "+str(baud))
             self.connect_manually()
@@ -58,13 +64,13 @@ class IMUBoard:
         board = cls()
         try:
             success = True
-            control_port, data_port, baud = board.read_connection_settings(set_data_port)
+            control_port, data_port, control_baud, data_baud = board.read_connection_settings(set_data_port)
             if not control_port: #or not data_port:
                 #print("no control port in cache -> fail")
                 success = False
             if not set_data_port:
                 data_port = None
-            success = success and board.connect_to_ports(data_port, control_port, baud)
+            success = success and board.connect_to_ports(data_port, control_port, control_baud, data_baud)
         except Exception as e:
             success = False
             #print("connect from cache error: " + str(e))
@@ -77,6 +83,33 @@ class IMUBoard:
             board.release_connections()
             if board.auto_no_cache(set_data_port): # None on fail
                 board.write_connection_settings(set_data_port) #also counts as success -> save.
+            else:
+                board.release_connections()
+                return None
+        return board
+
+    @classmethod
+    def auto_from_sn(cls, serial_number: str, set_data_port=True):
+        board = cls()
+        try:
+            success = True
+            control_port, data_port, control_baud, data_baud = board.read_connection_settings(set_data_port)
+            if not control_port: #or not data_port:
+                #print("no control port in cache -> fail")
+                success = False
+            if not set_data_port:
+                data_port = None
+            success = success and board.connect_to_ports(data_port, control_port, control_baud, data_baud)
+            success = ((success) and (board.retry_get_serial().decode() == serial_number))
+        except Exception as e:
+            success = False
+
+        if success:
+            pass
+        else:
+            board.release_connections()
+            if board.auto_no_cache_from_sn(serial_number, set_data_port):
+                pass
             else:
                 board.release_connections()
                 return None
@@ -112,12 +145,15 @@ class IMUBoard:
             #print("reading from "+str(cache_path))
             with open(cache_path, 'r') as settings_file:
                 settings = json.load(settings_file)
-                control, baud = settings["control_port"], settings["baud"]
+                control_port = settings["control_port"]
+                control_baud = settings["control_baud"]
+                #TODO - should it fall back on "baud" if no "control_baud" and "data_baud"?
                 if using_data_port:
-                    data = settings["data_port"] #TODO - handle None case here?
+                    data_port = settings["data_port"]
+                    data_baud = settings["data_baud"]
                 else:
-                    data = None
-                return control, data, baud
+                    data_port, data_baud = None, None
+                return control_port, data_port, control_baud, data_baud
         except Exception as e:
             #print("error reading connection settings: "+str(e))
             return None
@@ -125,16 +161,17 @@ class IMUBoard:
     def write_connection_settings(self, using_data_port):
         try:
             cache_name = CONNECTION_CACHE_WITH_DATA_PORT if using_data_port else CONNECTION_CACHE_NO_DATA_PORT
-            control, baud = self.control_port_name, self.baud
+            control_port, control_baud = self.control_port_name, self.control_baud
             # avoid writing null for ports
-            if control is None:
+            if control_port is None:
                 return None
-            settings = {"control_port": control, "baud": baud}
+            settings = {"control_port": control_port, "control_baud": control_baud}
             if using_data_port:
-                data = self.data_port_name
+                data_port = self.data_port_name
                 # if data is None: #would this happen?
                 #     data = self.compute_data_port()  # TODO- maybe wrong for GNSS and IMU
-                settings["data_port"] = data
+                settings["data_port"] = data_port
+                settings["data_baud"] = self.data_baud
             cache_path = os.path.join(os.path.dirname(__file__), cache_name)
             #print("writing to " + str(cache_path))
             with open(cache_path, 'w') as settings_file:
@@ -145,7 +182,12 @@ class IMUBoard:
 
     # connect to the port numbers. return true if succesful connection, false if serial error or ping fails.
     #TODO - call connect_data_port here since it is similar, and make a connect_control_port too?
-    def connect_to_ports(self, data_port=None, control_port=None, baud=DEFAULT_BAUD):
+
+    def connect_to_ports(self, data_port=None, control_port=None, control_baud=DEFAULT_BAUD, data_baud=None):
+
+        if data_baud is None:
+            data_baud = control_baud
+
         #print(f"connect_to_ports: data_port = {data_port}, control_port = {control_port}, baud = {baud}")
         success = True
         timeout = self.timeout if self.timeout else TIMEOUT_REGULAR
@@ -153,18 +195,20 @@ class IMUBoard:
             if data_port is None:
                 self.data_connection = DummyConnection()
             else:
-                self.data_connection = SerialConnection(data_port, baud, timeout)
+                self.data_connection = SerialConnection(data_port, data_baud, timeout)
+                self.data_baud = data_baud
             if control_port is None:
                 self.control_connection = DummyConnection()
             else:
-                self.control_connection = SerialConnection(control_port, baud, timeout)
+                self.control_connection = SerialConnection(control_port, control_baud, timeout)
+                self.control_baud = control_baud
             control_success = (control_port is None) or self.check_control_port()
             data_success = (data_port is None) or self.check_data_port()
             success = control_success and data_success
             #print(f"control_success is {control_success}, data_success is {data_success}, success is {success}")
 
             if not success: #try other baud rates, then check again
-                baud = self.auto_detect_baud()
+                config_baud, data_baud = self.auto_detect_baud()
                 success = ((control_port is None) or self.check_control_port()) and ((data_port is None) or self.check_data_port())
                 #print(f"trying on baud {baud} instead: success is {success}")
 
@@ -175,7 +219,6 @@ class IMUBoard:
         if success:
             self.data_port_name = data_port
             self.control_port_name = control_port
-            self.baud = baud
         else:
             self.release_connections()
         self.connect_success = success
@@ -187,7 +230,6 @@ class IMUBoard:
         try:
             self.data_connection = SerialConnection(data_port, baud, timeout)
             self.data_port_name = data_port
-            self.baud = baud
             return True
         except Exception as e:
             self.release_data_port()
@@ -248,9 +290,9 @@ class IMUBoard:
         for i in range(4):
             msg = self.read_one_message()
             debug_print(f"check_data_port message {i}: {msg}")
-            if msg and msg.valid and msg.msgtype in [b'CAL', b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']:
-                #print("True")
+            if msg and hasattr(msg, "msgtype") and msg.msgtype in [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG']:
                 check_success = True
+                break
         #change uart or odr back if changed.
         if changed_odr:
             self.set_cfg_flash({"odr": b"0"})
@@ -259,11 +301,54 @@ class IMUBoard:
         return check_success
 
     def clear_inputs(self):
-        self.data_connection.reset_input_buffer()
-        self.control_connection.reset_input_buffer()
-        self.data_connection.readall()
-        self.control_connection.readall()
-        #reset odometer port here? but need check for not exists/is dummy/is None
+        self.clear_data_port()
+        self.clear_control_port()
+        # reset odometer port here? but need check for not exists/is dummy/is None
+
+    def clear_connection(self, connection, scheme):
+        # temporarily set timeout to zero, and read data until read is empty
+        connection.reset_input_buffer()
+        old_timeout = connection.get_timeout()
+        connection.set_timeout(0)
+
+        last_byte = connection.read(1)
+        while len(last_byte) > 0:
+            last_byte = connection.read(1)
+
+        # windows com port settings: latency timer is 1 to 255 ms , default 16 ms
+        # test_clear_connections on Windows laptop: there were 0.15 to 0.18s gaps at 16ms setting, 0.31 s at 255ms setting
+        max_port_latency_s = 0.255
+        time.sleep(max_port_latency_s * 2)  # use double the latency to make sure
+
+        last_byte = connection.read(1)
+        while len(last_byte) > 0:
+            last_byte = connection.read(1)
+
+        # use read_one_message to clear any partial messages
+        while True:
+            try:
+                m = scheme.read_one_message(connection)
+                # print(m)
+                if m is None:
+                    break
+                elif hasattr(m, "valid"):
+                    # UDP connection has no "connection" or "in_waiting". TODO - does it need a similar check for UDP?
+                    if not hasattr(connection, "connection"):  # UDP connection
+                        break
+                    if m.valid and connection.connection.in_waiting < 50:
+                        break
+                    if m.error == "Length(unpack)":
+                        break
+            except AssertionError:
+                continue
+
+        connection.set_timeout(old_timeout)
+
+    def clear_control_port(self):
+        self.clear_connection(self.control_connection, self.control_scheme)
+
+    def clear_data_port(self):
+        self.clear_connection(self.data_connection, self.data_scheme)
 
     def release_connections(self):
         if hasattr(self, "data_connection"):
@@ -276,13 +361,13 @@ class IMUBoard:
     # connect again on serial after disconnecting. TOD0 - make a version for ethernet too?
     def reconnect_serial(self):
         #self.connect_to_ports(data_port=self.data_port_name, control_port=self.control_port_name)
-        self.__init__(self.data_port_name, self.control_port_name, self.baud, self.data_scheme, self.control_scheme)
+        self.__init__(self.data_port_name, self.control_port_name, baud=self.control_baud, data_baud=self.data_baud,
+                      data_scheme=self.data_scheme, control_scheme=self.control_scheme)
 
     # disconnect and reconnect serial. TODO - does this work for ethernet?
     def reset_connections(self):
         self.release_connections()
         self.reconnect_serial()
-        #self.__init__(self.data_port_name, self.control_port_name, self.baud, self.data_scheme, self.control_scheme)
 
     def list_ports(self):
         return sorted([p.device for p in list_ports.comports()])
@@ -291,34 +376,40 @@ class IMUBoard:
     def auto_no_cache(self, set_data_port=True):
         #print("\n_____auto no cache_____")
         bauds = ALLOWED_BAUD.copy() #already in preferred order
-        for baud in bauds:
-            outcome = self.auto_port(baud, set_data_port)
+        for control_baud in bauds:
+            outcome = self.auto_port(control_baud, set_data_port)
             if outcome: #(control_port, data_port) if succeeded, None if failed
-                return outcome + (baud,)
+                #control_port, data_port, control_baud, data_baud = outcome
+                return True
             else:
                 continue
         return self.connect_manually(set_data_port) #TODO - turn this off, or do based on a "manual_fallback" arg?
 
     # detect ports with known baud rate, returns ports or None on fail
-    def auto_port(self, baud, set_data_port=True):
-        debug_print(f"auto_port, baud = {baud}, set_data_port = {set_data_port}")
+    def auto_port(self, control_baud, set_data_port=True):
+        debug_print(f"auto_port, baud = {control_baud}, set_data_port = {set_data_port}")
         port_names = self.list_ports()
         for control_port in reversed(port_names):
             try:
-                self.control_connection = SerialConnection(port=control_port, baud=baud, timeout=TIMEOUT_AUTOBAUD)
+                self.control_connection = SerialConnection(port=control_port, baud=control_baud, timeout=TIMEOUT_AUTOBAUD)
                 if self.check_control_port():  # success - can set things
                     print(f"connected control port: {control_port}")
                     self.control_port_name = control_port
                     self.control_connection.set_timeout(TIMEOUT_REGULAR)
-                    self.baud = baud
+                    self.control_baud = control_baud
+                    data_baud = self.get_data_baud_flash()
+                    self.data_baud = data_baud
                     data_port = None
                     if set_data_port:
                         pid = self.get_pid().pid  # TODO - handle errors and retry?
                         if (b'EVK' in pid) or (b'A1' in pid) or (b'A-1' in pid):
                             #EVK case, including old EVK pid variations: subtract 3.
                             data_port = self.compute_data_port()
-                            self.data_connection = SerialConnection(data_port, baud)
+                            self.data_connection = SerialConnection(data_port, data_baud)
                         #if b'GNSS' in pid or b'IMU' in pid:
+                        # elif b'X3' in pid:
+                        #     data_port = self.compute_data_port_x3()
+                        #     self.data_connection = SerialConnection(data_port, baud)
                         else:
                             #pick the port which outputs IMU or CAL - but won't work if odr 0, and could get a different unit.
                             data_port = self.find_data_port_gnss_imu() #this finds and connects, don't need to set self.data_connection
@@ -327,7 +418,7 @@ class IMUBoard:
                         if data_port is None: #fail on data port not found
                             return None
                         self.data_port_name = data_port
-                    return control_port, data_port
+                    return control_port, data_port, control_baud, data_baud
                 else:
                     self.release_connections()
             except Exception as e:
@@ -337,6 +428,63 @@ class IMUBoard:
         # no ports worked - clean up and report fail
         self.release_connections()
         return None
+
+        # with no cached value - auto connect by trying baud 921600 for all ports first, then other bauds
+    def auto_no_cache_from_sn(self, serial_number: str, set_data_port=True):
+        #print("\n_____auto no cache_____")
+        bauds = ALLOWED_BAUD.copy() #already in preferred order
+        for baud in bauds:
+            outcome = self.auto_port_from_sn(baud, serial_number, set_data_port)
+            if outcome: #(control_port, data_port) if succeeded, None if failed
+                return outcome + (baud,)
+            else:
+                continue
+        return self.connect_manually(set_data_port) #TODO - turn this off, or do based on a "manual_fallback" arg?
+        
+    #TODO adapt this function for serial number
+    def auto_port_from_sn(self, baud, serial_number: str, set_data_port=True):
+        debug_print(f"auto_port, baud = {baud}, set_data_port = {set_data_port}")
+        port_names = self.list_ports()
+        for control_port in reversed(port_names):
+            try:
+                self.control_connection = SerialConnection(port=control_port, baud=baud, timeout=TIMEOUT_AUTOBAUD)
+                if self.check_control_port():  # success - can set things
+                    if self.retry_get_serial().decode() == serial_number:
+                        print(f"connected control port: {control_port}")
+                        self.control_port_name = control_port
+                        self.control_connection.set_timeout(TIMEOUT_REGULAR)
+                        data_port = None
+                        if set_data_port:
+                            pid = self.get_pid().pid  # TODO - handle errors and retry?
+                            if (b'EVK' in pid) or (b'A1' in pid) or (b'A-1' in pid):
+                                #EVK case, including old EVK pid variations: subtract 3.
+                                data_port = self.compute_data_port_from_sn(serial_number)
+                                self.data_connection = SerialConnection(data_port, baud)
+                            #if b'GNSS' in pid or b'IMU' in pid:
+                            # elif b'X3' in pid:
+                            #     data_port = self.compute_data_port_x3()
+                            #     self.data_connection = SerialConnection(data_port, baud)
+                            else:
+                                #pick the port which outputs IMU or CAL - but won't work if odr 0, and could get a different unit.
+                                data_port = self.find_data_port_gnss_imu() #this finds and connects, don't need to set self.data_connection
+                                #print(f"data port was {data_port}")
+                                #data_port = self.data_port_name
+                            if data_port is None: #fail on data port not found
+                                return None
+                            self.data_port_name = data_port
+                        return control_port, data_port
+                    else:
+                        self.release_connections()
+                else:
+                    self.release_connections()
+            except Exception as e:
+                debug_print("skipping over port " + control_port + " with error: " + str(e))
+                self.release_connections()
+                continue
+        # no ports worked - clean up and report fail
+        self.release_connections()
+        return None
+        pass
 
     # compute data port from control port by subtracting 3 from the number part.
     # eg "COM10" -> "COM7"
@@ -350,6 +498,74 @@ class IMUBoard:
             prefix, numbers = self.control_port_name[:m.start()], self.control_port_name[m.start():]
             minus_three = str(int(numbers) - 3)
             return prefix+minus_three
+        except Exception as e:
+            return None
+
+    def compute_data_port_from_sn(self, serial_number: str):
+        def is_port_outputting(port_name: str):
+            iteration_count = 10
+            data_arr = []
+            conn = None
+            try:
+                conn = SerialConnection(port_name, self.data_baud, timeout=TIMEOUT_REGULAR)
+                for i in range(iteration_count):
+                    time.sleep(.01)
+                    data_arr.append(len(conn.readall()))    
+                conn.close()
+            except Exception as e:
+                if not conn is None:
+                    conn.close()
+                return False
+
+            halfway_index = int(iteration_count / 2)
+            return sum(data_arr[halfway_index:]) > 0            # only look at last half to avoid old data thats been cached on the port
+
+        if self.control_port_name is None:
+            return None  # when control_port = None, data_port will always be None too
+        try:
+            # get serial output state
+            uart_state = self.retry_get_cfg(['uart'])[0]
+            self.retry_set_cfg({'uart': b'on'})
+
+
+            # get all ports outputting data
+            outputting_ports = []
+            ports = self.list_ports()
+            for port in ports:
+                if is_port_outputting(port):
+                    outputting_ports.append(port)
+
+
+            # set serial output state 'off'
+            self.retry_set_cfg({'uart': b'off'})
+            
+            # of the previously outputting data, which have stopped outputting after sending "uart off" command
+            final_candidates = []
+            for port in outputting_ports:
+                if not is_port_outputting(port):
+                    final_candidates.append(port)
+
+            self.retry_set_cfg({'uart': uart_state})
+            
+            if len(final_candidates) != 1:
+                raise Exception(f"{len(final_candidates)} objects for port:{self.control_port_name} when 1 is expected")
+            
+            return final_candidates[0]
+        except Exception as e:
+            debug_print(str(e))
+            return None
+
+    # for X3 with new connector board, data port = config_port - 1
+    def compute_data_port_x3(self):
+        if self.control_port_name is None:
+            return None  # when control_port = None, data_port will always be None too
+        try:
+            pattern = re.compile(r'\d*$')  # match as many digits as possible at the end of the string
+            m = pattern.search(self.control_port_name)
+            prefix, numbers = self.control_port_name[:m.start()], self.control_port_name[m.start():]
+            minus_one = str(int(numbers) - 1)
+            #print(f"computing data port for x3: config {numbers} -> data is {minus_one}")
+            return prefix+minus_one
         except Exception as e:
             return None
 
@@ -367,7 +583,7 @@ class IMUBoard:
         
         for possible_data_port in all_ports:
             debug_print(f"looking for data port at {possible_data_port}, data scheme is {self.data_scheme}")
-            if self.connect_data_port(possible_data_port, self.baud): #230400):  #TODO: 2300400 baud for GNSS - or should it use self.baud?
+            if self.connect_data_port(possible_data_port, self.data_baud):
                 debug_print(f"connected at {possible_data_port}")
                 if self.check_data_port():
                     debug_print(f"check success at {possible_data_port}")
@@ -380,22 +596,29 @@ class IMUBoard:
     # requires board to have control_connection and data_connection already set to the right ports
     def auto_detect_baud(self):
         bauds = ALLOWED_BAUD.copy() #already in preferred order
-        for baud in bauds:
-            self.control_connection.set_baud(baud)
+        for control_baud in bauds:
+            self.control_connection.set_baud(control_baud)
+            self.control_baud = control_baud
             self.control_connection.reset_input_buffer()
             response = self.ping()
             if response and response.valid and response.msgtype == b'PNG':
-                self.data_connection.set_baud(baud)
+                data_baud = self.get_data_baud_flash()
+                self.data_baud = data_baud
+                self.data_connection.set_baud(data_baud)
                 self.data_connection.reset_input_buffer()
-                return baud
+                return control_baud, data_baud
         return None
 
     #set the serial connections baud (does not set baud configuration on the product)
     # if UDP connection, set_baud does nothing.
-    def set_connection_baud(self, baud):
-        self.baud = baud
-        self.control_connection.set_baud(baud)
-        self.data_connection.set_baud(baud)
+    def set_connection_baud(self, new_control_baud=None, new_data_baud=None):
+        if new_control_baud:
+            self.control_baud = new_control_baud
+            self.control_connection.set_baud(new_control_baud)
+        if new_data_baud:
+            self.data_baud = new_data_baud
+            self.data_connection.set_baud(new_data_baud)
+
         # clear any bad data at the old baud
         self.control_connection.readall()
         self.data_connection.readall()
@@ -425,7 +648,7 @@ class IMUBoard:
                         serial_con.close()
                         return None
                     if not set_config_port:
-                        valid_baud_rates = [115200, 230400, 921600]
+                        valid_baud_rates = ALLOWED_BAUD  #[115200, 230400, 921600]
                         print("\nselect baud rate")
                         baud = valid_baud_rates[cutie.select(valid_baud_rates, selected_index=0)]
                         data_con = SerialConnection(data_port, baud, timeout=TIMEOUT_REGULAR)
@@ -447,9 +670,7 @@ class IMUBoard:
             self.data_port_name = data_port
             self.control_connection = config_con
             self.control_port_name = "None"
-            self.baud = baud
-            return None, data_port, baud
-
+            return True
 
         # connect to control port - need this to configure the board
         connected = False
@@ -472,11 +693,10 @@ class IMUBoard:
         self.data_port_name = data_port
         self.control_connection = control_con
         self.control_port_name = control_port
-        baud = self.auto_detect_baud()
-        self.baud = baud
+        control_baud, data_baud = self.auto_detect_baud()
         # print("auto detected baud = "+str(baud))
         self.write_connection_settings(set_data_port)
-        return control_port, data_port, baud #{"control port": port, "data port": data_port, "baud": baud}
+        return True #control_port, data_port, baud #{"control port": port, "data port": data_port, "baud": baud}
 
     # reads one message - returns None if there is no message
     # this does not error on None since Session loop just keeps waiting
@@ -528,7 +748,7 @@ class IMUBoard:
             if not resp: # timeout , return None
                 return None
             # skip any output types, for firmware versions that output on both ports
-            if hasattr(resp, "msgtype") and resp.msgtype in [b'CAL', b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']:
+            if hasattr(resp, "msgtype") and resp.msgtype in [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG']:
                 continue
             return resp
 
@@ -566,6 +786,10 @@ class IMUBoard:
     def set_cfg_flash(self, configurations):
         m = Message({'msgtype': b'CFG', 'mode': WRITE_FLASH, 'configurations': configurations})
         return self.send_control_message(m)
+
+    def set_cfg_flash_no_wait(self, configurations):
+        m = Message({'msgtype': b'CFG', 'mode': WRITE_FLASH, 'configurations': configurations})
+        return self.send_control_no_wait(m)
 
     def get_cfg(self, names_list):
         m = Message({'msgtype': b'CFG', 'mode': READ_RAM, 'configurations': names_list})
@@ -623,9 +847,13 @@ class IMUBoard:
         else:
             self.send_control_no_wait(m)
 
-    def send_initial_heading(self, heading):
-        m = Message({'msgtype': b'INI', 'mode':INI_HEADING, 'value': heading})
-        self.send_control_message(m)
+    def send_init(self, configurations):
+        m = Message({'msgtype': b'INI', 'configurations': configurations})
+        return self.send_control_message(m)
+
+    def send_update(self, configurations):
+        m = Message({'msgtype': b'UPD', 'configurations': configurations})
+        return self.send_control_message(m)
 
     # enable odometer config in ram or flash - need this for test setup since odo=off can't set to other values
     def enable_odo_ram(self):
@@ -855,6 +1083,25 @@ class IMUBoard:
     def retry_unlock_flash(self):
         return self.retry_get_info(self.unlock_flash, b"UNL", "locked") == b'Unlocked' #return True/False
 
+    # read baud configs in a way that works on old and new firmware.
+    # before 1.3 release: "bau" config is baud for data and config ports
+    # after: "bau" is data port baud only, "bau_input" is config port baud.
+    def get_data_baud_flash(self):
+        try:
+            return int(self.retry_get_cfg_flash(["bau"])[0])
+        except Exception as e:
+            return None
+
+    def get_control_baud_flash(self):
+        try:
+            bau_input_resp = self.retry_get_cfg_flash(["bau_input"])
+            if bau_input_resp:
+                return int(bau_input_resp[0])
+            else:
+                return int(self.retry_get_cfg_flash(["bau"])[0])
+        except Exception as e:
+            return None
+
     #def retry_ping(self):  - should it have this?
     #def retry_echo(self, contents): - should it have this?
 
@@ -881,22 +1128,19 @@ class IMUBoard:
         for k, v in configs.items():
             self.retry_set_veh_flash({k: v})
 
-    #reset with sleeps before/after, like in verify_algo off but not checking algo
-    #use this to reset safely in programs
+    # use this to reset safely in programs
     # use new_baud only if baud changed, otherwise leave None
-    def reset_with_waits(self, new_baud=None):
+    def reset_with_waits(self, new_control_baud=None, new_data_baud=None):
         wait_time = 0.5
         time.sleep(wait_time)
         self.send_reset_regular()
         time.sleep(wait_time)
 
-        #use the new baud if it changed, otherwise ping and other messages will fail.
-        if new_baud:
-            self.set_connection_baud(new_baud)
+        # use the new baud if it changed, otherwise ping and other messages will fail.
+        self.set_connection_baud(new_control_baud, new_data_baud)
 
         while self.ping() is None:
             #TODO - should this time out eventually -> retry connection?
-            #print("waiting on reset")
             time.sleep(wait_time)
 
     # bootloader function taking hex file path and expected version after
@@ -950,6 +1194,7 @@ class IMUBoard:
         else:
             print(f"\nversion afterward {version_after_resp_string} did not match expected {expected_version_after}")
             print("check version and retry update if needed")
+
 
     # to set vehicle configs in terminal with cutie. put here to share with user_program.py and config.py
     def set_veh_terminal_interface(self, allowed_configs=None):

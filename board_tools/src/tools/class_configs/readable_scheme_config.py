@@ -13,7 +13,6 @@ READ_RAM = b'r'
 WRITE_FLASH = b'W'
 READ_FLASH = b'R'
 
-
 # APIMU,7757199.318,-0.0004,0.0131,0.5096,1.8946,-0.2313,-0.4396,0*7E
 FORMAT_IMU_NO_SYNC = [ #normal EVK, length 11
     ("imu_time_ms", float),
@@ -46,31 +45,6 @@ FORMAT_IMU_WITH_SYNC = [ #normal EVK, length 12
     ("temperature_c", float)
 ]
 
-#IMU type has no odometer, may or may not have fog.
-# FORMAT_IMU_NO_ODO = [ #length 9
-#     ("imu_time_ms", float),
-#     ("accel_x_g", float),
-#     ("accel_y_g", float),
-#     ("accel_z_g", float),
-#     ("angrate_x_dps", float),
-#     ("angrate_y_dps", float),
-#     ("angrate_z_dps", float),
-#     ("fog_angrate_z_dps", float),
-#     ("temperature_c", float)
-# ]
-
-#for IMU type without the fog
-# FORMAT_IMU_NO_ODO_NO_FOG = [ #length 8
-#     ("imu_time_ms", float),
-#     ("accel_x_g", float),
-#     ("accel_y_g", float),
-#     ("accel_z_g", float),
-#     ("angrate_x_dps", float),
-#     ("angrate_y_dps", float),
-#     ("angrate_z_dps", float),
-#     ("temperature_c", float)
-# ]
-
 #3 fog with no sync format- is this still used?
 FORMAT_IMU_3FOG = [ #length 13
     ("imu_time_ms", float),
@@ -88,7 +62,26 @@ FORMAT_IMU_3FOG = [ #length 13
     ("temperature_c", float)
 ]
 
-#older A1 firmware has fog volts, removed in v0.2.1
+FORMAT_IMU_X3 = [ #length 15, with 3 fogs, 3d magnetometer, sync, no odometer.
+    ("imu_time_ms", float),
+    ("sync_time_ms", float),
+    ("accel_x_g", float),
+    ("accel_y_g", float),
+    ("accel_z_g", float),
+    ("angrate_x_dps", float),
+    ("angrate_y_dps", float),
+    ("angrate_z_dps", float),
+    ("fog_angrate_x_dps", float),
+    ("fog_angrate_y_dps", float),
+    ("fog_angrate_z_dps", float),
+    ("mag_x", float),
+    ("mag_y", float),
+    ("mag_z", float),
+    ("temperature_c", float)
+]
+
+
+# older A1 firmware has fog volts, removed in v0.2.1
 # FORMAT_IMU_WITH_FOG_VOLTS = [ #length 12
 #     ("imu_time_ms", float),
 #     ("accel_x_g", float),
@@ -234,7 +227,7 @@ FORMAT_ODO = [
 FORMAT_INS = [
     ("imu_time_ms", float),
     ("gps_time_ns", int),
-    ("ins_solution_status", int), #was heading_initialized
+    ("ins_solution_status_and_gps_used", int),
     ("lat_deg", float),
     ("lon_deg", float),
     ("alt_m", float),
@@ -252,7 +245,7 @@ FORMAT_INS_EXTRA_COMMA = [
     ("imu_time_ms", float),
     ("gps_time_ns", int),
     ("extra comma", int), #for the extra comma
-    ("ins_solution_status", int),
+    ("ins_solution_status_and_gps_used", int),
     ("lat_deg", float),
     ("lon_deg", float),
     ("alt_m", float),
@@ -294,22 +287,29 @@ HEADING_FLAGS = {
     9: "relPos_Normalized",
 }
 
+INI_UPD_FIELDS = [
+    "pos", "pos_unc", "hdg", "hdg_unc", "spd", "spd_unc", "att", "att_unc",
+]
+
+INI_UPD_ERROR_CODES = {
+    b'0': "State not ready",
+    b'1': "State already initialized",
+    b'2': "Missing uncertainty",
+}
+
 # put VEH options here so VEH methods can go in IMUBoard. originally in user_program_config.py
 VEH_FIELDS_MAIN = {
-    "GPS Antenna 1    ": (("x", "g1x"), ("y", "g1y"), ("z", "g1z")),
-    "GPS Antenna 2    ": (("x", "g2x"), ("y", "g2y"), ("z", "g2z")),
-    "Rear Axle Center ": (("x", "cnx"), ("y", "cny"), ("z", "cnz")),
-    "Output Center    ": (("x", "ocx"), ("y", "ocy"), ("z", "ocz")),
-    "Antenna Baseline": "bsl",
+    "GPS Antenna 1       ": (("x", "g1x"), ("y", "g1y"), ("z", "g1z")),
+    "GPS Antenna 2       ": (("x", "g2x"), ("y", "g2y"), ("z", "g2z")),
+    "Rear Axle Center    ": (("x", "cnx"), ("y", "cny"), ("z", "cnz")),
+    "Output Center       ": (("x", "ocx"), ("y", "ocy"), ("z", "ocz")),
+    "Odometer Position   ": (("x", "wsx"), ("y", "wsy"), ("z", "wsz")),
+    "Antenna Baseline    ": "bsl",
     "Baseline Calibration": "bcal",
     "Ticks per rev ": "tic",
     "Wheel radius  ": "rad",
-    "GPS accuracy floor (m)": "rmin",
     "Zupt calibration    ": "zcal",
-}
-
-VEH_VALUE_OPTIONS = {
-    "bcal": ["1", "2", "99"]  # allow setting 0/None?
+    "GPS accuracy floor (m)": "rmin",
 }
 
 # will put these in a sub-menu of vehicle configs, not main veh menu.
@@ -326,6 +326,10 @@ VEH_ZUPT_FIELDS = {
 VEH_FIELDS_ALL = VEH_FIELDS_MAIN.copy()
 VEH_FIELDS_ALL.update(VEH_ZUPT_FIELDS)
 
+VEH_VALUE_OPTIONS = {
+    "bcal": ["1", "2", "99"]  # allow setting 0/None?
+}
+
 VEH_VALUE_NAMES = {
     ("bcal", "1"): "Auto calibrate",
     ("bcal", "2"): "From lever arms",
@@ -335,6 +339,8 @@ VEH_VALUE_NAMES = {
     ("zcal", "1"): "Calibrating",
     ("zcal", "3"): "Reset",
 }
+
+NMEA_BIT_POSITIONS = {0: "GGA", 1: "GSA", 2: "RMC"}
 
 ERROR_CODES = {
     1: "No start character",

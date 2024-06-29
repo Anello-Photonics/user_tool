@@ -41,9 +41,10 @@ all_show_fields = {b'GPS': EXPORT_GPS_FIELDS,
                    b'INS': EXPORT_INS_FIELDS,
                    b'IMU': EXPORT_IMU_FIELDS,
                    b'IM1': EXPORT_IM1_FIELDS,
-                   b'HDG': EXPORT_HDG_FIELDS}
+                   b'HDG': EXPORT_HDG_FIELDS,}
 
-all_defaults = {b'GPS': gps_defaults, b'GP2': gps_defaults, b'INS': ins_defaults, b'IMU': imu_defaults, b'IM1': im1_defaults, b'HDG': hdg_defaults}
+all_defaults = {b'GPS': gps_defaults, b'GP2': gps_defaults, b'INS': ins_defaults, b'IMU': imu_defaults,
+                b'IM1': im1_defaults, b'HDG': hdg_defaults}
 
 
 # formatted point feature to put in csv
@@ -168,6 +169,7 @@ def export_log_by_format(file_path, format="rtcm"):
     print("exporting to " + os.path.normpath(hdg_file_path))
     hdg_out = open(hdg_file_path, 'w')
     hdg_out.write(hdg_header)
+
 
     all_outputs = {b'GPS': gps_out, b'GP2': gp2_out, b'INS': ins_out, b'IMU': imu_out, b'IM1': im1_out, b'HDG': hdg_out}
 

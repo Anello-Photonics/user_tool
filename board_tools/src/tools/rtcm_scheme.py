@@ -94,6 +94,16 @@ class RTCM_Scheme(Scheme):
             if msgtype == RTCM_MSGTYPE_GPS and hasattr(message, "antenna_id"):
                 message.msgtype = b'GPS' if message.antenna_id == 0 else b'GP2'
 
+            # carrier solution >= 8 means GPS off. separate into two attributes.
+            if hasattr(message, "ins_solution_status_and_gps_used"):
+                status_and_gps = message.ins_solution_status_and_gps_used
+                if 255 > status_and_gps >= 8:
+                    message.ins_solution_status = status_and_gps - 8
+                    message.gps_used = False
+                else:
+                    message.ins_solution_status = status_and_gps
+                    message.gps_used = True
+
             #imu time ns to ms conversion: keep both on the message
             if hasattr(message, "imu_time_ns"):
                 message.imu_time_ms = message.imu_time_ns / 1e6

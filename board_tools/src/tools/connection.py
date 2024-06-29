@@ -77,7 +77,7 @@ class DummyConnection(Connection):
 # actual connection to serial port
 class SerialConnection(Connection):
 	def __init__(self, port=None, baud=DEFAULT_BAUD, timeout=TIMEOUT_REGULAR, write_timeout=TIMEOUT_REGULAR):
-		self.connection = serial.Serial(port, baud, timeout=timeout, write_timeout=write_timeout)
+		self.connection = serial.Serial(port, baud, timeout=timeout, write_timeout=write_timeout, exclusive=True)
 		self.readall() #clear any old data when connecting
 
 	def __repr__(self):

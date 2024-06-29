@@ -8,4 +8,4 @@ Pillow #image processing, used for arrow in user_program map tab
 pylru #least recently used cache, for user_program map caching
 pyrtcm #rtcm message parsing in rtcm_scheme.py
 pyserial #serial port library
-PySimpleGUI==4.60.4 #graphics in user_program.py. v5 requires subscription.
+PySimpleGUI-4-foss==4.60.4.1   #graphics in user_program.py

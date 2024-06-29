@@ -158,7 +158,17 @@ class Binary_Scheme(Scheme):
                 message.carrier_solution_status = message.carrsoln_and_fix // 16 #first 4/8 bits
                 message.gnss_fix_type = message.carrsoln_and_fix % 16 #last 4/8 bits
 
-            #imu time ns to ms conversion: keep both on the message
+            # carrier solution >= 8 means GPS off. separate into two attributes.
+            if hasattr(message, "ins_solution_status_and_gps_used"):
+                status_and_gps = message.ins_solution_status_and_gps_used
+                if 255 > status_and_gps >= 8:
+                    message.ins_solution_status = status_and_gps - 8
+                    message.gps_used = False
+                else:
+                    message.ins_solution_status = status_and_gps
+                    message.gps_used = True
+
+            # imu time ns to ms conversion: keep both on the message
             if hasattr(message, "imu_time_ns"):
                 message.imu_time_ms = message.imu_time_ns / 1e6
             if hasattr(message, "odometer_time_ns"):

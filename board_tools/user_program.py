@@ -41,7 +41,7 @@ class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
     def __init__(self, exitflag, con_on, con_start, con_stop, con_succeed,
-                 con_type, com_port, com_baud, udp_ip, udp_port, gps_received,
+                 con_type, com_port, data_port_baud, config_port_baud, udp_ip, udp_port, gps_received,
                  log_on, log_start, log_stop, log_name,
                  ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                  ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -60,8 +60,8 @@ class UserProgram:
         #keep the shared vars as class attributes so other UserProgram methods have them.
         #set them like self.log_name.value = x so change is shared. not self.log_name = x
         self.exitflag, self.con_on, self.con_start, self.con_stop, self.con_succeed = exitflag, con_on, con_start, con_stop, con_succeed
-        self.con_type, self.com_port, self.com_baud, self.udp_ip, self.udp_port, self.gps_received =\
-            con_type, com_port, com_baud, udp_ip, udp_port, gps_received
+        self.con_type, self.com_port, self.data_port_baud, self.control_port_baud, self.udp_ip, self.udp_port, self.gps_received =\
+            con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received
         self.log_on, self.log_start, self.log_stop, self.log_name = log_on, log_start, log_stop, log_name
         self.ntrip_on, self.ntrip_start, self.ntrip_stop, self.ntrip_succeed = ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed
         self.ntrip_ip, self.ntrip_port, self.ntrip_gga, self.ntrip_req = ntrip_ip, ntrip_port, ntrip_gga, ntrip_req
@@ -70,7 +70,7 @@ class UserProgram:
 
         #any features which might or not be there - do based on firmware version?
         self.available_configs = []
-        self.show_gps_info = False
+        self.show_gps_info = True
 
         #self.map_cache = {} #cache for map tiles. or could use lru.LRU[max_items] to avoid overfilling
         #self.map_cache = LRU(MAX_CACHE_TILES) #TODO - calculate how many tiles we can store in memory
@@ -87,7 +87,24 @@ class UserProgram:
                 clear_screen()
                 self.show_info()
                 print("\nSelect One:")
-                action = MENU_OPTIONS[cutie.select(MENU_OPTIONS)]
+
+                if self.board:
+                    # is connected -> normal options
+                    menu_options = MENU_OPTIONS.copy()
+
+                    # for non-gps, non-algo product types, don't need certain menu options
+                    if not self.show_gps_info:
+                        try:
+                            menu_options.remove("NTRIP")  # GPS corrections, so not needed without GPS
+                            menu_options.remove("Vehicle Configuration")  # for GPS, odometer and other navigation
+                            menu_options.remove("Send Inputs")  # for position/heading messages: not needed without GPS
+                        except ValueError:
+                            pass
+                else:
+                    # not connected: reduced options
+                    menu_options = MENU_OPTIONS_WHEN_DISCONNECTED
+
+                action = menu_options[cutie.select(menu_options)]
                 if action == "Connect":
                     self.connect()
                 elif action == "Unit Configuration":
@@ -110,6 +127,8 @@ class UserProgram:
                     self.exit()
                 elif action == "Restart Unit":
                     self.reset()
+                elif action == "Send Inputs":
+                    self.initialize_and_update_menu()
                 else:
                     raise Exception("invalid action: " + str(action))
             except (socket.error, socket.herror, socket.gaierror, socket.timeout, serial.SerialException, serial.SerialTimeoutException) as e:
@@ -247,8 +266,9 @@ class UserProgram:
             self.con_succeed.value = 0
             if data_success and control_success:
                 # do stuff based on pid here since connect_udp and connect_com get the pid
-                if 'IMU' in self.product_id:
-                    self.show_gps_info = False  # IMU type has no GNSS info
+                if ('IMU' in self.product_id.upper()) or ('X3' in self.product_id.upper()) :
+                    self.show_gps_info = False  # IMU, IMU+, X3 types have no antennas
+                    #TODO - turn on another flag if X3 -> indicate to show FOG x, FOG y, magnetometer in monitor?
                 else:
                     self.show_gps_info = True  # default is to show everything
                 return
@@ -285,7 +305,7 @@ class UserProgram:
             return
 
         # let io_thread do the data connection - give it the signal, close this copy
-        self.com_port.value, self.com_baud.value = data_port_name.encode(), board.baud
+        self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
         self.con_type.value = b"COM"
         self.con_on.value = 1
         self.con_start.value = 1
@@ -399,6 +419,8 @@ class UserProgram:
         if code == "aln":
             print("\nEnter alignment angles")
             value = form_aln_string_prompt()
+        elif code == "nmea":
+            value = form_nmea_value_prompt()
         elif code in CFG_VALUE_OPTIONS:
             print("\nselect " + name)
             value_options = CFG_VALUE_OPTIONS[code].copy()
@@ -453,7 +475,10 @@ class UserProgram:
                 if cfg_field_code in CFG_CODES_TO_NAMES:
                     full_name = CFG_CODES_TO_NAMES[cfg_field_code]
                     value_code = configs_dict[cfg_field_code].decode()
-                    value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
+                    if cfg_field_code == "nmea":
+                        value_name = show_nmea_flags_value(value_code)
+                    else:
+                        value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
@@ -553,11 +578,43 @@ class UserProgram:
             show_and_pause("Error reading vehicle configs. Try again or check cables."
                            "\nOld firmware versions may not have this feature.\n")
 
-    # logging mode:
-    # prompt for file name with default suggestion
-    # stay in logging mode with indicator of # messages logged updated once/sec
-    # also count NTRIP messages if connected
-    # stop when esc or q is entered
+    def initialize_and_update_menu(self):
+        if not self.board:
+            show_and_pause("\nmust connect before sending inputs")
+            return
+
+        set_options = ["initial position", "initial heading", "update heading", "cancel"]
+        print("\ninitialization/update type:")
+        chosen_type = set_options[cutie.select(set_options)]
+        if chosen_type == "cancel":
+            return
+
+        print("\nenter values:")
+        if chosen_type == "initial position":
+            position_string = form_position_string_prompt()
+            position_unc_string = form_position_unc_string_prompt()
+            resp = self.board.send_init({'pos': position_string, 'pos_unc': position_unc_string})
+        elif chosen_type == 'initial heading':
+            heading_string = form_heading_string_prompt()
+            heading_unc_string = form_heading_unc_string_prompt()
+            resp = self.board.send_init({'hdg': heading_string, 'hdg_unc': heading_unc_string})
+        elif chosen_type == 'update heading':
+            heading_string = form_heading_string_prompt()
+            heading_unc_string = form_heading_unc_string_prompt()
+            resp = self.board.send_update({'hdg': heading_string, 'hdg_unc': heading_unc_string})
+
+        # shows success or handle errors. TODO - should it use retries, or proper_response function?
+        msg_type = resp.msgtype if hasattr(resp, "msgtype") else None
+        if msg_type == b'ERR':
+            show_and_pause("\nError: " + ERROR_CODES[resp.err])
+        elif msg_type in [b'INI', b'UPD']:
+            if "err" in resp.configurations:
+                show_and_pause("\nError: " + INI_UPD_ERROR_CODES[resp.configurations["err"]])
+            else: #normal response, show success message
+                show_and_pause(f"\nupdated: {resp.configurations}")
+        else:
+            show_and_pause(f"\nunexpected response type {msg_type}")
+
     def log(self):
         clear_screen()
         self.show_logging()
@@ -1565,11 +1622,28 @@ class UserProgram:
 
     # send regular reset, not bootloading reset
     def reset(self):
-        if self.board:
-            print("\nrestarting")
-            self.board.reset_with_waits() #reset, then wait and ping until responsive.
-        else:
+        if not self.board:
             show_and_pause("must connect to unit before resetting")
+            return
+
+        if self.con_type.value == b"UDP":
+            # UDP doesn't care about baud change. TODO - handle UDP setting changes here?
+            print("\nrestarting")
+            self.board.reset_with_waits()
+        else:
+            # serial connection needs to use new bauds if they changed.
+            new_control_baud = self.board.get_control_baud_flash()
+            new_data_baud = self.board.get_data_baud_flash()
+            print("\nrestarting")
+            self.board.reset_with_waits(new_control_baud, new_data_baud)
+    
+            # tell ioloop to use the new data port baud
+            self.data_port_baud.value = new_data_baud
+            self.con_start.value = 1
+            while self.con_succeed.value == 0:
+                time.sleep(0.1)
+            data_success = (self.con_succeed.value == 1)  # 0 waiting, 1 succeed, 2 fail
+            self.con_succeed.value = 0
 
     def plot(self):
         show_and_pause("Not implemented yet")
@@ -1746,9 +1820,61 @@ def form_aln_string_prompt():
     return f"{roll_angle:+.6f}{pitch_angle:+.6f}{heading_angle:+.6f}"
 
 
+def form_position_string_prompt():
+    lat_deg = cutie.get_number(prompt="latitude (degrees): ", min_value=-90, max_value=90, allow_float=True)
+    lon_deg = cutie.get_number(prompt="longitude (degrees): ", min_value=-180, max_value=180, allow_float=True)
+    alt_m = cutie.get_number(prompt="altitude (meters): ", allow_float=True)
+    return f"{lat_deg:+.10f}{lon_deg:+.10f}{alt_m:+.6f}" # TODO - check how many decimal places needed
+
+
+def form_position_unc_string_prompt():
+    h_acc = cutie.get_number(prompt="horizontal accuracy (m): ")
+    v_acc = cutie.get_number(prompt="vertical accuracy (m): ")
+    return f"{h_acc:+.6f}{v_acc:+.6f}"  # TODO - check how many decimal places needed
+
+
+def form_heading_string_prompt():
+    hdg = cutie.get_number(prompt="heading (degrees): ", min_value=-180, max_value=180, allow_float=True)
+    return f"{hdg:.6f}"  # TODO - check how many decimal places needed
+
+
+def form_heading_unc_string_prompt():
+    hdg_unc = cutie.get_number(prompt="heading uncertainty (degrees): ", allow_float=True)
+    return f"{hdg_unc:.6f}"  # TODO - check how many decimal places needed
+
+def form_nmea_value_prompt():
+    value_codes_to_numbers = ({"on": 1, "off": 0})
+    value_codes = list(value_codes_to_numbers.keys())
+    combined_number = 0
+
+    print("\nPick on/off for each NMEA message:")
+    for position, name in readable_scheme_config.NMEA_BIT_POSITIONS.items():
+        print(f"\n{name}")
+        chosen = value_codes[cutie.select(value_codes)]
+        if chosen == "on":  # or could add pow(2, position) * (zero or 1)
+            combined_number += pow(2, position)
+    return str(int(combined_number))
+
+
+# split 0-7 code into the 3 on/off flags, then print each separately.
+def show_nmea_flags_value(number_code):
+    try:
+        number_code = int(number_code)
+    except Exception as e:
+        return number_code
+
+    out_str = ""
+    for position, name in readable_scheme_config.NMEA_BIT_POSITIONS.items():
+        # find that bit using bitwise and with power of two
+        power = pow(2, position)
+        zero_or_one = int((number_code & power)/power)
+        out_str += f"{name}: {'on' if zero_or_one == 1 else 'off'}  "
+    return out_str
+
+
 #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
 def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
-                con_type, com_port, com_baud, udp_ip, udp_port, gps_received,
+                con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                 log_on, log_start, log_stop, log_name,
                 ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                 ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -1757,7 +1883,7 @@ def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
                 serial_number
     ):
     prog = UserProgram(exitflag, con_on, con_start, con_stop, con_succeed,
-                       con_type, com_port, com_baud, udp_ip, udp_port, gps_received,
+                       con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                        log_on, log_start, log_stop, log_name,
                        ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                        ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -1780,7 +1906,8 @@ if __name__ == "__main__":
     con_succeed = Value('b', 0)
     con_type = Array('c', string_size) #com/udp
     com_port = Array('c', string_size)#str
-    com_baud = Value('i', 0) #int
+    data_port_baud = Value('i', 0)
+    control_port_baud = Value('i', 0)  # maybe not used
     udp_ip = Array('c', string_size) #str
     udp_port = Value('i', 0) #int
     gps_received = Value('b', 0)
@@ -1813,12 +1940,11 @@ if __name__ == "__main__":
     serial_number = Array('c', string_size)
 
     shared_args = (exitflag, con_on, con_start, con_stop, con_succeed,
-                   con_type, com_port, com_baud, udp_ip, udp_port, gps_received,
+                   con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                    log_on, log_start, log_stop, log_name,
                    ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed, ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
-                   last_imu_time,
-                   serial_number              
+                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_imu_time,
+                   serial_number,               
     )
     io_process = Process(target=io_loop, args=shared_args)
     io_process.start()

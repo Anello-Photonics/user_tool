@@ -1,7 +1,24 @@
 # version number for user_program and other tools
-PROGRAM_VERSION = 1.2
+PROGRAM_VERSION = 1.3
 
 # ________________VERSION NOTES____________________
+
+# _____ V1.3: updates to support EVK/GNSS/IMU firmware v1.3 release _____
+
+# Support new features for firmware 1.3 release:
+#       Zupt Calibration: manual or automatic
+#       increase optional NMEA message outputs to include GGA,GSA, RMC at rates of 1-5 Hz.
+#       Allow user to send position and heading to the unit
+#       Allow separate baud rates on the config and data serial ports
+#       Non-holonomic constraint options: car/default, agricultural, off
+#       forward/backward detection: on/off
+
+# Make user_program handle X3 product:
+#       fix serial connecting issues
+#       hide menus and monitor tabs which don't apply to X3
+#       export X3 message format including 3 Optical Gyros and magnetometer.
+
+# change to PySimpleGUI-4-foss version
 
 # _____ V1.2: updates to support firmware v1.2 release _____
 

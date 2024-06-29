@@ -1,6 +1,6 @@
 DEFAULT_BAUD = 921600
 #all allowed bauds, put in the order that autobaud should try. usually 921600 for EVK, 230400 for GNSS and IMU
-ALLOWED_BAUD = [921600, 230400, 460800, 115200, 57600] #[57600, 115200, 230400, 460800, 921600]
+ALLOWED_BAUD = [921600, 230400, 19200, 460800, 115200, 57600] #[57600, 115200, 230400, 460800, 921600]
 ALLOWED_SMP = [200, 400, 500, 1000, 2000]
 TIMEOUT_AUTOBAUD = 0.2 #timeout (s) while searching for units/checking baud
 TIMEOUT_REGULAR = 0.4 #normal timeout when connected. todo - does it ever need a longer timeout? #was 4
