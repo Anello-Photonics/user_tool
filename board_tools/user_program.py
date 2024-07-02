@@ -425,6 +425,11 @@ class UserProgram:
             print("\nselect " + name)
             value_options = CFG_VALUE_OPTIONS[code].copy()
 
+            # limit IMU and GNSS to 230400 baud for RS232 cables.
+            if code in ["bau", "bau_input"]:
+                if ('IMU' in self.product_id.upper()) or ('GNSS' in self.product_id.upper()):
+                    value_options = RS232_BAUDS
+
             # don't allow message format = binary if any sensor ranges are 0, or version below 1.2
             if code == "mfm":
                 self.board.retry_unlock_flash()

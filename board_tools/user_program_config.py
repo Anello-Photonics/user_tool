@@ -113,6 +113,7 @@ CFG_VALUE_OPTIONS = {
     "dir_det": ['on', 'off'],
     "nmea_rate": ["1", "2", "4", "5"],
 }
+RS232_BAUDS = ["19200", "57600", "115200", "230400"]
 
 CFG_VALUE_NAMES = {
     #put only the fully supported formats: ASCII/RTCM/Binary
