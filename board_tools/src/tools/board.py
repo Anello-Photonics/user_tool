@@ -20,6 +20,7 @@ try:  # importing from inside the package
     from message_scheme import Message
     from connection import *
     from class_configs.board_config import *
+    from detect_os import os_type, processor_type
 except ModuleNotFoundError:  # importing from outside the package
     from tools.readable_scheme import *
     from tools.rtcm_scheme import *
@@ -27,6 +28,7 @@ except ModuleNotFoundError:  # importing from outside the package
     from tools.message_scheme import Message
     from tools.connection import *
     from tools.class_configs.board_config import *
+    from tools.detect_os import os_type, processor_type
 
 debug = False
 COMMANDS_RETRY = 5 #retry limit for commands. mostly matters for USB with lower baud, large commands
@@ -1143,16 +1145,16 @@ class IMUBoard:
             #TODO - should this time out eventually -> retry connection?
             time.sleep(wait_time)
 
-    # bootloader function taking hex file path and expected version after
-    def bootload_with_file_path(self, hex_file_path, expected_version_after="unknown", num_attempts=1):
-        # check OS. os.name = 'nt' for windows, 'posix' for Linux and Mac.
-        if os.name != 'nt':
-            print("bootloader currently works on Windows only, canceling.")
-            return
+    def find_bootloader_name(self):
+        windows_bootloader_name = "crossplatform_bootloader_windows_x86_release.exe"
+        linux_arm_bootloader_name = "crossplatform_bootloader_linux_arm"
+        linux_x86_bootloader_name = "crossplatform_bootloader_linux_x86"
+        bootloader_v2_name = "HtxAurixBootLoader_v2.0.0.exe"  # IMU+ still requires this, for Windows only.
 
-        # use bootloader v2 for IMU+ only, v1 for IMU and others.
-        bootloader_v1_name = "HtxAurixBootLoader.exe"
-        bootloader_v2_name = "HtxAurixBootLoader_v2.0.0.exe"
+        linux_bootloaders = {
+            "Linux x86": linux_x86_bootloader_name,
+            "Linux ARM": linux_arm_bootloader_name,
+        }
 
         try:
             prod_id = self.retry_get_pid().decode()
@@ -1160,15 +1162,41 @@ class IMUBoard:
             print("could not read product id -> canceled bootloading")
             return
 
-        # TODO - just check for "IMU" in product id, or check entire product id vs a list of known ones?
-        if "IMU+" in prod_id :
-            bootloader_name = bootloader_v2_name
-        elif "IMU" in prod_id:
-            bootloader_name = bootloader_v1_name
-        else:
-            bootloader_name = bootloader_v1_name
+        computer_os = os_type()
+        computer_processor = processor_type()
 
-        print(f"\nUsing {bootloader_name} for '{prod_id}' product type.")
+        if "IMU+" in prod_id:
+            # only IMU+ needs V2 bootloader. IMU/EVK/GNSS/X3 are all V1.
+            if computer_os.lower() == "windows":
+                return bootloader_v2_name
+            else:
+                show_and_pause("Bootloader requires Windows OS for IMU+ product")
+                return
+        elif computer_os.lower() == "windows":
+            return windows_bootloader_name
+        elif computer_os.lower() == "linux":
+            if computer_processor.lower() == "x86":
+                return linux_x86_bootloader_name
+            elif computer_processor.lower() == "arm":
+                return linux_arm_bootloader_name
+            else:
+                print(f"\nArchitecture not recognized for Linux: {computer_processor}")
+                print("Select an option that matches your system, or cancel if none match:")
+                options = list(linux_bootloaders.keys()) + ["cancel"]
+                chosen = options[cutie.select(options)]
+                if chosen == "cancel":
+                    return
+                return linux_bootloaders[chosen]
+        else:
+            show_and_pause(f"\nBootloader does not support {computer_os} Operating System")
+            return
+        # TODO should it check for 32 bit, or Windows ARM vs x86?
+
+    # bootloader function taking hex file path and expected version after
+    def bootload_with_file_path(self, bootloader_name, hex_file_path, expected_version_after="unknown", num_attempts=1):
+        if bootloader_name is None:
+            return
+        print(f"\nBootloading with {bootloader_name}")
 
         print("\nKeep plugged in until upgrade finishes.")
         print("If bootload fails: cycle power, then connect user_program again to check firmware version.")
@@ -1176,10 +1204,23 @@ class IMUBoard:
         self.enter_bootloading()
         self.release_connections()
         # send bootloader commands. TODO - should it use subprocess.call() instead of os.system()?
-        os.system(f".\{bootloader_name} START TC36X 6 {self.data_port_name[3:]} 115200 0 0 0 0")
-        # note - [3:] will work for windows "COM" port numbers, not on other os. But this bootloader is windows only.
-        os.system(f".\{bootloader_name} PROGRAMVERIFY \"{hex_file_path}\" 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000 0x0")
-        os.system(f".\{bootloader_name} END")
+        port_prefix, port_number = split_port_name(self.data_port_name)
+
+        computer_os = os_type()
+        if computer_os.lower() == "windows":
+            os.system(f".{os.sep}{bootloader_name} START TC36X 6 {port_number} 115200 0 0 0 0")
+            os.system(f".{os.sep}{bootloader_name} PROGRAM \"{hex_file_path}\"")
+            os.system(f".{os.sep}{bootloader_name} END")
+        elif computer_os.lower() == "linux":
+            # on Linux: make executable first, and "sudo" all commands to make sure it has permissions.
+            os.system(f"sudo chmod +x {bootloader_name}")
+            os.system(f"sudo .{os.sep}{bootloader_name} START TC36X 6 {port_number} 115200 0 0 0 0")
+            os.system(f"sudo .{os.sep}{bootloader_name} PROGRAM \"{hex_file_path}\"")
+            os.system(f"sudo .{os.sep}{bootloader_name} END")
+        else:
+            # find_bootloader_name should already catch if OS not supported.
+            show_and_pause(f"Bootloader does not support {computer_os} Operating System")
+            return
 
         # connect again after disconnect (this is specific to serial connection). TODO - handle errors here?
         time.sleep(1)  # pause to let it restart.
@@ -1415,3 +1456,15 @@ def truncate_decimal(num_or_str, places):
     except (ValueError, TypeError):
         # if can't convert, just return the original thing (could be None, non-numerical string, etc)
         return num_or_str
+
+
+# split port name into prefix and numbers
+# Windows COM1, Linux /dev/ttyUSB1, etc.
+def split_port_name(port_name):
+    try:
+        pattern = re.compile(r'\d*$')  # match as many digits as possible at the end of the string
+        m = pattern.search(port_name)
+        prefix, number = port_name[:m.start()], port_name[m.start():]
+        return prefix, int(number)
+    except Exception as e:
+        return None, None

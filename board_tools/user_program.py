@@ -1584,16 +1584,15 @@ class UserProgram:
         print("\nNotes:")
         print("\tGet the firmware file from Anello Photonics: IMU-A1_v<version number>.hex")
         print("\tSoftware update is over USB only, not ethernet.")
-        print("\tRequires Windows OS.")
-
-        # check for windows, connected over usb
-        if os.name != 'nt':
-            show_and_pause("\nBootloader currently works on Windows only.")
-            return
+        print("\tSupports Windows and Linux OS.")
 
         if not (self.board and self.connection_info["type"] == "COM"):
             show_and_pause("\nMust connect by USB before upgrading (not over ethernet)")
+            return
 
+        # check OS bootloader compatible before starting, prevent update if no valid bootloader.
+        bootloader_name = self.board.find_bootloader_name()
+        if bootloader_name is None:
             return
 
         print("\nSelect the firmware file")
@@ -1612,7 +1611,7 @@ class UserProgram:
             self.release_for_bootload() #release data port and stop functions that use it like logging, ntrip
             try:
                 expect_version_after = "unknown"  # this means it won't check expected version
-                self.board.bootload_with_file_path(hex_file_path, expect_version_after, num_attempts=1)
+                self.board.bootload_with_file_path(bootloader_name, hex_file_path, expect_version_after, num_attempts=1)
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()
