@@ -1303,25 +1303,13 @@ class IMUBoard:
 
         # menu for zupt calibration
         elif grouping == "zcal":
-            manually_text = "Enter manually"
             auto_text = "Auto calibrate"
             reset_text = "Reset"
             cancel_text = "cancel"
-            baseline_options = [manually_text, auto_text, reset_text, cancel_text]
+            baseline_options = [auto_text, reset_text, cancel_text]
             chosen_option = baseline_options[cutie.select(baseline_options)]
             if chosen_option == cancel_text:
                 return
-            elif chosen_option == manually_text:
-                # prompt for all the zupt fields
-                for zupt_field_name, zupt_field_codes in VEH_ZUPT_FIELDS.items():
-                    if type(zupt_field_codes) is tuple:
-                        print(zupt_field_name)
-                        for axis, sub_code in zupt_field_codes:
-                            value = input(f"{axis}: ").encode()
-                            args[sub_code] = value
-                    else:
-                        value = input(zupt_field_name + ": ").encode()
-                        args[zupt_field_codes] = value
             elif chosen_option == auto_text:
                 args["zcal"] = b'1'
             elif chosen_option == reset_text:
@@ -1363,27 +1351,35 @@ class IMUBoard:
             # if proper_response(resp, b'VEH'):
             out_str = "\nVehicle Configurations:  (all vectors in meters with center of ANELLO unit as origin)"
 
-            for name, grouping in VEH_FIELDS_ALL.items():
+            for name, grouping in VEH_FIELDS_MAIN.items():
 
                 # don't show baseline calibration here, since we have separate print for calibration in progress.
                 if grouping == "bcal":
                     continue
 
-                # number of decimal places
-                if grouping in ["zacct", "zangt"]:
-                    # accel and rate counters are integer
-                    decimal_places = 0
-                elif grouping in ["zmmps", "zsmps"]:
-                    # accels: show 4 places
-                    decimal_places = 4
-                elif name in VEH_ZUPT_FIELDS:
-                    # catchall for zupt fields, currently is the gyro mean and threshold x,y,z
-                    decimal_places = 5
-                else:
-                    decimal_places = 3
+                decimal_places = 3
+
+                # show Zupt calibration differently if it's been calibrated (has nonzero zupt configs) or not
+                if grouping == "zcal":
+                    raw_val = veh_configs[grouping].decode()
+                    if raw_val == "0":
+                        # not calibrating now: check if any nonzero values. After reset or on new product, all are 0
+                        values_are_nonzero = [(float(v) != 0.0) for (k,v) in veh_configs.items() if k in VEH_ZUPT_CAL_LIST]
+                        if any(values_are_nonzero):
+                            named_value = "Calibrated"
+                        else:
+                            named_value = "Not Calibrated"
+
+                    elif raw_val == "1":
+                        named_value = "Calibration in progress"
+                    else:
+                        # don't expect to get here: should only be 0, 1. or 3 for "reset" but that clears immediately.
+                        named_value = VEH_VALUE_NAMES.get((grouping, raw_val), raw_val)
+                    line = f"\n    {name}: {truncate_decimal(named_value, decimal_places)}"
+                    out_str += line
 
                 # tuple means multi-part like x/y/z: show all in one line, blank any missing
-                if type(grouping) is tuple:
+                elif type(grouping) is tuple:
                     line = "\n    " + name + ": "
                     has_any_axis = False
                     for axis, code in grouping:

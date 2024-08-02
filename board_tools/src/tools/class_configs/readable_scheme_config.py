@@ -322,9 +322,12 @@ VEH_ZUPT_FIELDS = {
     "Zupt Gyro Count     ": "zangt",
 }
 
+VEH_ZUPT_CAL_LIST = ["zmmps", "zsmps", "zacct", "zangt",
+                      "zmrpsx", "zmrpsy", "zmrpsz",
+                      "zsrpsx", "zsrpsy", "zsrpsz"]
+
 # combined dictionary, to show in read veh configs menu
 VEH_FIELDS_ALL = VEH_FIELDS_MAIN.copy()
-VEH_FIELDS_ALL.update(VEH_ZUPT_FIELDS)
 
 VEH_VALUE_OPTIONS = {
     "bcal": ["1", "2", "99"]  # allow setting 0/None?
