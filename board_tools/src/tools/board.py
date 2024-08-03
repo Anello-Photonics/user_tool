@@ -1359,27 +1359,8 @@ class IMUBoard:
 
                 decimal_places = 3
 
-                # show Zupt calibration differently if it's been calibrated (has nonzero zupt configs) or not
-                if grouping == "zcal":
-                    raw_val = veh_configs[grouping].decode()
-                    if raw_val == "0":
-                        # not calibrating now: check if any nonzero values. After reset or on new product, all are 0
-                        values_are_nonzero = [(float(v) != 0.0) for (k,v) in veh_configs.items() if k in VEH_ZUPT_CAL_LIST]
-                        if any(values_are_nonzero):
-                            named_value = "Calibrated"
-                        else:
-                            named_value = "Not Calibrated"
-
-                    elif raw_val == "1":
-                        named_value = "Calibration in progress"
-                    else:
-                        # don't expect to get here: should only be 0, 1. or 3 for "reset" but that clears immediately.
-                        named_value = VEH_VALUE_NAMES.get((grouping, raw_val), raw_val)
-                    line = f"\n    {name}: {truncate_decimal(named_value, decimal_places)}"
-                    out_str += line
-
                 # tuple means multi-part like x/y/z: show all in one line, blank any missing
-                elif type(grouping) is tuple:
+                if type(grouping) is tuple:
                     line = "\n    " + name + ": "
                     has_any_axis = False
                     for axis, code in grouping:
@@ -1402,6 +1383,18 @@ class IMUBoard:
                     # clearer explanation for baseline calibration status.
                     if grouping == "bcal" and raw_val != "0":
                         named_value = f"In Progress ({named_value})"
+
+                    # also show zupt calibration in a simplified way.
+                    elif grouping == "zcal":
+                        if raw_val == "0":
+                            # not calibrating now: check if any nonzero values. After reset or on new product, all are 0
+                            values_are_nonzero = [(float(v) != 0.0) for (k, v) in veh_configs.items() if k in VEH_ZUPT_CAL_LIST]
+                            if any(values_are_nonzero):
+                                named_value = "Calibrated"
+                            else:
+                                named_value = "Not Calibrated"
+                        elif raw_val == "1":
+                            named_value = "Calibration in progress"
 
                     line = f"\n    {name}: {truncate_decimal(named_value, decimal_places)}"
                     out_str += line
