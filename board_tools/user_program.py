@@ -35,6 +35,7 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import traceback
     from file_picking import pick_one_file, pick_multiple_files
 
+    from log_config import log_board_config
 
 #interface for A1 configuration and logging
 class UserProgram:
@@ -111,6 +112,9 @@ class UserProgram:
                     self.configure()
                 elif action == "Vehicle Configuration":
                     self.vehicle_configure()
+                elif action == "Save Configs":
+                    self.save_configurations()
+                    show_and_pause("")  # pause to show config path here, since save_configurations doesn't pause
                 elif action == "Log":
                     self.log()
                 elif action == "Monitor":
@@ -582,6 +586,16 @@ class UserProgram:
         else:
             show_and_pause("Error reading vehicle configs. Try again or check cables."
                            "\nOld firmware versions may not have this feature.\n")
+            
+    def save_configurations(self):
+        if not self.board:
+            show_and_pause("\nMust connect before saving")
+            return
+
+        config_path = log_board_config(self.board)
+        print(f"\n Configuration Saved to {config_path}")
+        time.sleep(.1)
+        pass
 
     def initialize_and_update_menu(self):
         if not self.board:
@@ -661,6 +675,7 @@ class UserProgram:
             self.log_name.value = chosen_name.encode()
             self.log_on.value = 1
             self.log_start.value = 1
+            self.save_configurations()
 
     def stop_logging(self):
         self.log_on.value = 0

@@ -18,6 +18,7 @@ MENU_OPTIONS = [
     "Monitor",
     "NTRIP",
     "Send Inputs",
+    "Save Configs",
     "Firmware Update",
     #"Plot", # put this back in menu when implemented
     "Exit"
