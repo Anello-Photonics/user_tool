@@ -270,6 +270,7 @@ class UserProgram:
             self.con_succeed.value = 0
             if data_success and control_success:
                 # do stuff based on pid here since connect_udp and connect_com get the pid
+                self.correct_evk_product_id()
                 if ('IMU' in self.product_id.upper()) or ('X3' in self.product_id.upper()) :
                     self.show_gps_info = False  # IMU, IMU+, X3 types have no antennas
                     #TODO - turn on another flag if X3 -> indicate to show FOG x, FOG y, magnetometer in monitor?
@@ -383,8 +384,19 @@ class UserProgram:
             else:
                 return False  # indicate failed connection
 
+        self.correct_evk_product_id()
         self.shared_serial_number.value = self.serialnum.encode()
         return True   # success if none of the reads failed
+
+    # old EVK may have names like "Anello IMU A-1" which the program could confuse with an "Anello IMU" product
+    # or variations like A1, A-1, A1C, A1-C A-1C
+    # recognize these and show as "Anello EVK"
+    def correct_evk_product_id(self):
+        if not self.product_id:
+            return
+        pid = self.product_id.upper()
+        if 'A1' in pid or "A-1" in pid or 'A 1' in pid or "A_1" in pid:
+            self.product_id = "Anello EVK"
 
     def configure(self):
         if not self.board:
@@ -431,6 +443,7 @@ class UserProgram:
 
             # limit IMU and GNSS to 230400 baud for RS232 cables.
             if code in ["bau", "bau_input"]:
+                self.correct_evk_product_id()
                 if ('IMU' in self.product_id.upper()) or ('GNSS' in self.product_id.upper()):
                     value_options = RS232_BAUDS
 
