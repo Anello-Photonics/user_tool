@@ -1,10 +1,10 @@
 bitstring #used for binary parsing in rtcm_scheme.py
 cutie #text based menus in user_program, config.py and other tools
-geotiler #map library for user_program map
+geotiler==0.15.1  #map library for user_program map
 matplotlib #graphing, requirement for PySimpleGUI
 numpy #vector math, used in calibration/validation/plotting
 pandas #csv processing
-Pillow #image processing, used for arrow in user_program map tab
+Pillow==10.4.0 #image processing, used for arrow in user_program map tab
 pylru #least recently used cache, for user_program map caching
 pyrtcm #rtcm message parsing in rtcm_scheme.py
 pyserial #serial port library
