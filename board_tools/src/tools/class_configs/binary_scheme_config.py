@@ -17,6 +17,8 @@ BINARY_MSGTYPE_GPS = 3
 BINARY_MSGTYPE_GP2 = 4
 BINARY_MSGTYPE_HDG = 5
 BINARY_MSGTYPE_INS = 6
+BINARY_MSGTYPE_INF = 7
+BINARY_MSGTYPE_BIAS = 9
 
 #all the allowed types. TODO - should this be an enum or dictionary?
 BINARY_MESSAGE_TYPES = [
@@ -26,6 +28,7 @@ BINARY_MESSAGE_TYPES = [
     BINARY_MSGTYPE_GP2,
     BINARY_MSGTYPE_HDG,
     BINARY_MSGTYPE_INS,
+    BINARY_MSGTYPE_BIAS,
 ]
 
 # use this to tag messages with the same ascii message types
@@ -36,6 +39,7 @@ BINARY_EQUIVALENT_MESSAGE_TYPES = {
     BINARY_MSGTYPE_GPS: b'GPS',
     BINARY_MSGTYPE_GP2: b'GP2',
     BINARY_MSGTYPE_HDG: b'HDG',
+    BINARY_MSGTYPE_BIAS: b'BIA',
 }
 
 # convert usual names to struct.pack/unpack codes. see: https://docs.python.org/3/library/struct.html
@@ -50,6 +54,8 @@ NUMBER_TYPES = {
     'uint32':   "I",
     'int64':    "q",
     'uint64':   "Q",
+    'float32':  "f",  # c float type
+    "float64":  "d",  # c double type
 }
 
 
@@ -119,4 +125,14 @@ BINARY_FORMAT_HDG = [
     ("relPosLenAcc_m", "uint16", 1.0/10000),
     ("relPosHeadingAcc_deg", "uint16", 1.0/100),
     ("flags", "uint16"),
+]
+
+BINARY_FORMAT_BIAS = [
+    ("imu_time_ns", "uint64"),
+    ("accel_x_bias_g", "float32"),
+    ("accel_y_bias_g", "float32"),
+    ("accel_z_bias_g", "float32"),
+    ("rate_x_bias_dps", "float32"),
+    ("rate_y_bias_dps", "float32"),
+    ("rate_z_bias_dps", "float32"),
 ]

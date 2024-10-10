@@ -180,6 +180,7 @@ class ReadableScheme(Scheme):
             b'SEN': self.set_payload_fields_with_names,
             b'INI': self.set_payload_fields_INI_UPD,
             b'UPD': self.set_payload_fields_INI_UPD,
+            b'BIA': self.set_payload_fields_BIA,
         }
         decoderFunc = decoders.get(msgtype)
         if decoderFunc:
@@ -334,6 +335,9 @@ class ReadableScheme(Scheme):
 
     def set_payload_fields_ODO(self, message, payload):
         self.set_fields_from_list(message, FORMAT_ODO, payload)
+
+    def set_payload_fields_BIA(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_BIAS, payload)
 
     #config message: mode is read or write
     #write has name, value pairs:   APCFG,w,odr,100,msg,IMU  is CFG with mode = write, odr = 10, msg = IMU

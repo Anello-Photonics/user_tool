@@ -36,15 +36,22 @@ def hdg_defaults(name):
     #return "missing"
 
 
-all_show_fields = {b'GPS': EXPORT_GPS_FIELDS,
-                   b'GP2': EXPORT_GPS_FIELDS,
-                   b'INS': EXPORT_INS_FIELDS,
-                   b'IMU': EXPORT_IMU_FIELDS,
-                   b'IM1': EXPORT_IM1_FIELDS,
-                   b'HDG': EXPORT_HDG_FIELDS,}
+bias_header = ",".join(EXPORT_BIAS_FIELDS)
+def bia_defaults(name):
+    return ""
+
+all_show_fields = {
+    b'GPS': EXPORT_GPS_FIELDS,
+    b'GP2': EXPORT_GPS_FIELDS,
+    b'INS': EXPORT_INS_FIELDS,
+    b'IMU': EXPORT_IMU_FIELDS,
+    b'IM1': EXPORT_IM1_FIELDS,
+    b'HDG': EXPORT_HDG_FIELDS,
+    b'BIA': EXPORT_BIAS_FIELDS,
+}
 
 all_defaults = {b'GPS': gps_defaults, b'GP2': gps_defaults, b'INS': ins_defaults, b'IMU': imu_defaults,
-                b'IM1': im1_defaults, b'HDG': hdg_defaults}
+                b'IM1': im1_defaults, b'HDG': hdg_defaults, b'BIA': bia_defaults}
 
 
 # formatted point feature to put in csv
@@ -170,9 +177,13 @@ def export_log_by_format(file_path, format="rtcm"):
     hdg_out = open(hdg_file_path, 'w')
     hdg_out.write(hdg_header)
 
+    bia_file_path = os.path.join(export_path, f"{input_notype}_bia.csv")
+    print("exporting to " + os.path.normpath(bia_file_path))
+    bia_out = open(bia_file_path, 'w')
+    bia_out.write(bias_header)
 
-    all_outputs = {b'GPS': gps_out, b'GP2': gp2_out, b'INS': ins_out, b'IMU': imu_out, b'IM1': im1_out, b'HDG': hdg_out}
-
+    all_outputs = {b'GPS': gps_out, b'GP2': gp2_out, b'INS': ins_out, b'IMU': imu_out, b'IM1': im1_out, b'HDG': hdg_out,
+                   b'BIA': bia_out}
 
     # for each line in log file (read though, split on start or end codes):
         # parse as a message: this is the most readable way of specifying fields - by names instead of index
@@ -237,6 +248,7 @@ def export_log_by_format(file_path, format="rtcm"):
     imu_out.close()
     im1_out.close()
     hdg_out.close()
+    bia_out.close()
 
     if errors_count == 1:
         print(f"\n1 message failed to parse")

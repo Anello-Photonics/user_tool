@@ -164,6 +164,8 @@ class RTCM_Scheme(Scheme):
         elif message.rtcm_msgtype == RTCM_MSGTYPE_HEADING:
             self.set_fields_from_list_scaled(message, RTCM_DUAL_ANT_HEAD_FIELDS, payload)
             extract_flags_HDG(message) #separate the heading flags in "flags" attribute, from ReadableScheme
+        elif message.rtcm_msgtype == RTCM_MSGTYPE_BIAS:
+            self.set_fields_from_list_scaled(message, RTCM_BIAS_PAYLOAD_FIELDS, payload)
 
         #do any computed fields like adjusting time units after?
 

@@ -111,6 +111,16 @@ FORMAT_IM1 = [ #for IMU or IMU+: no odo, has sync time. has FOG rate even if dis
     ("temperature_c", float)
 ]
 
+FORMAT_BIAS = [
+    ("imu_time_ms", float),
+    ("accel_x_bias_g", float),
+    ("accel_y_bias_g", float),
+    ("accel_z_bias_g", float),
+    ("rate_x_bias_dps", float),
+    ("rate_y_bias_dps", float),
+    ("rate_z_bias_dps", float),
+]
+
 UNLOCK_FLASH_CODE = b'704E2590'
 LOCK_FLASH_CODE = b'1'
 FLASH_UNLOCKED_VALUE = b'Unlocked'

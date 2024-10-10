@@ -242,6 +242,8 @@ class Binary_Scheme(Scheme):
         elif message.binary_msgtype == BINARY_MSGTYPE_HDG:
             self.set_fields_from_list_scaled(message, BINARY_FORMAT_HDG, payload)
             extract_flags_HDG(message) #separate the heading flags in "flags" attribute, from ReadableScheme
+        elif message.binary_msgtype == BINARY_MSGTYPE_BIAS:
+            self.set_fields_from_list_scaled(message, BINARY_FORMAT_BIAS, payload)
 
         #do any computed fields like adjusting time units after?
 

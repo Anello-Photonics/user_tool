@@ -2,6 +2,11 @@
 DEBUG = False
 import time
 
+import sys
+import pathlib
+parent_dir = str(pathlib.Path(__file__).parent)
+sys.path.append(parent_dir+'/src/tools/class_configs')
+from readable_scheme_config import FORMAT_BIAS
 
 def debug_print(text):
     if DEBUG:
@@ -181,7 +186,7 @@ RUNNING_RETRIES = 10
 FLUSH_FREQUENCY = 200
 
 #__________Log export configs__________:
-EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
+EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG', b'BIA']
 
 EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
                      "accel_x_g", "accel_y_g", "accel_z_g",
@@ -226,6 +231,8 @@ EXPORT_HDG_FIELDS = [
     "refPosMiss", "refObsMiss",
     "relPosHeading_Valid", "relPos_Normalized",
 ]
+
+EXPORT_BIAS_FIELDS = [name for (name, number_type) in FORMAT_BIAS]
 
 EXPORT_DEFAULT_COLOR = [200, 200, 200]
 
