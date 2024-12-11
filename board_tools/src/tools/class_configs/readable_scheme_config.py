@@ -13,7 +13,13 @@ READ_RAM = b'r'
 WRITE_FLASH = b'W'
 READ_FLASH = b'R'
 
-# APIMU,7757199.318,-0.0004,0.0131,0.5096,1.8946,-0.2313,-0.4396,0*7E
+#codes for INI message
+HEADING_FLAG = b'hdg'
+INI_POSITION = b'pos'
+
+# output messages we recognize. these are actual msgtype in ASCII, converted from number in Binary and RTCM
+OUTPUT_MESSAGE_TYPES = [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG', b'MCA', b'MAG', b'SIPHOG']
+
 FORMAT_IMU_NO_SYNC = [ #normal EVK, length 11
     ("imu_time_ms", float),
     #("sync_time_ms", float),
@@ -62,7 +68,7 @@ FORMAT_IMU_3FOG = [ #length 13
     ("temperature_c", float)
 ]
 
-FORMAT_IMU_X3 = [ #length 15, with 3 fogs, 3d magnetometer, sync, no odometer.
+FORMAT_IMU_X3_NO_STATUS = [ #length 15, with 3 fogs, 3d magnetometer, sync time, no odometer.
     ("imu_time_ms", float),
     ("sync_time_ms", float),
     ("accel_x_g", float),
@@ -80,6 +86,33 @@ FORMAT_IMU_X3 = [ #length 15, with 3 fogs, 3d magnetometer, sync, no odometer.
     ("temperature_c", float)
 ]
 
+FORMAT_IMU_X3_WITH_STATUS = [ #length 18, with 3 fogs, 3d magnetometer, 3 status bytes, sync time, no odometer.
+    ("imu_time_ms", float),
+    ("sync_time_ms", float),
+    ("accel_x_g", float),
+    ("accel_y_g", float),
+    ("accel_z_g", float),
+    ("angrate_x_dps", float),
+    ("angrate_y_dps", float),
+    ("angrate_z_dps", float),
+    ("fog_angrate_x_dps", float),
+    ("fog_angrate_y_dps", float),
+    ("fog_angrate_z_dps", float),
+    ("mag_x", float),
+    ("mag_y", float),
+    ("mag_z", float),
+    ("temperature_c", float),
+    ("siphog_x_status", int),  # Status bytes in Siphog 1(X), 2(Z), 3(Y) order.
+    ("siphog_z_status", int),
+    ("siphog_y_status", int),
+]
+
+SIPHOG_STATUS_BIT_POSITIONS = {
+    "Gyro Discrepancy": 0,
+    "Temperature Uncontrolled": 1,
+    "Over current error": 2,
+    "Siphog supply voltage bad": 3,
+}
 
 # older A1 firmware has fog volts, removed in v0.2.1
 # FORMAT_IMU_WITH_FOG_VOLTS = [ #length 12

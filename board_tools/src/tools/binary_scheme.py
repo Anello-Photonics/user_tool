@@ -7,11 +7,11 @@ try:  # importing from inside the package
     #from pyrtcm import RTCMReader, RTCMParseError
     #from pyrtcm.rtcmtypes_core import ERR_RAISE, ERR_LOG, ERR_IGNORE
     from class_configs.binary_scheme_config import * #TODO make config file with fomats
-    from readable_scheme import extract_flags_HDG
+    from readable_scheme import extract_flags_HDG, SIPHOG_STATUS_BIT_POSITIONS, nth_bit
     from message_scheme import Scheme, Message
 except ModuleNotFoundError:  # importing from outside the package
     from tools.class_configs.binary_scheme_config import *
-    from tools.readable_scheme import extract_flags_HDG
+    from tools.readable_scheme import extract_flags_HDG, SIPHOG_STATUS_BIT_POSITIONS, nth_bit
     from tools.message_scheme import Scheme, Message
 
 #decoder for our custom binary messages, shorter than RTCM format
@@ -227,23 +227,29 @@ class Binary_Scheme(Scheme):
             message.error = "Check Error: "+str(err)
 
     def decode_payload_for_type(self, message, msgtype, payload):
-        # BINARY_MESSAGE_TYPES = [BINARY_MSGTYPE_IMU, BINARY_MSGTYPE_GPS, BINARY_MSGTYPE_HEADING, BINARY_MSGTYPE_INS]
-        if message.binary_msgtype not in BINARY_MESSAGE_TYPES:
+        # look up the message format and parse for that format.
+
+        msgtype = message.binary_msgtype
+        if msgtype not in BINARY_MESSAGE_TYPES:
             return
 
-        if message.binary_msgtype == BINARY_MSGTYPE_IMU:
-            self.set_fields_from_list_scaled(message, BINARY_FORMAT_IMU, payload)
-        elif message.binary_msgtype == BINARY_MSGTYPE_INS:
-            self.set_fields_from_list_scaled(message, BINARY_FORMAT_INS, payload)
-        elif message.binary_msgtype == BINARY_MSGTYPE_GPS:
-            self.set_fields_from_list_scaled(message, BINARY_FORMAT_GPS, payload)
-        elif message.binary_msgtype == BINARY_MSGTYPE_GP2:
-            self.set_fields_from_list_scaled(message, BINARY_FORMAT_GP2, payload)
-        elif message.binary_msgtype == BINARY_MSGTYPE_HDG:
-            self.set_fields_from_list_scaled(message, BINARY_FORMAT_HDG, payload)
-            extract_flags_HDG(message) #separate the heading flags in "flags" attribute, from ReadableScheme
+        msg_format = BINARY_MESSAGE_TYPES[msgtype]
+        self.set_fields_from_list_scaled(message, msg_format, payload)
 
-        #do any computed fields like adjusting time units after?
+        # any parsing special cases go here
+
+        # HDG: extra flags to extract
+        if msgtype == BINARY_MSGTYPE_HDG:
+            extract_flags_HDG(message)  # separate the heading flags in "flags" attribute, from ReadableScheme
+
+        # split X3 status bit fields. one "16 bit" int is really 12 bits, 4 status bits per siphog
+        if msgtype == BINARY_MSGTYPE_X3_IMU and hasattr(message, "status_info"):
+            axis_offsets = {"x": 0, "y": 8, "z": 4}  # 4 bits per axis starting at 0, in xzy order
+            for ax, offset in axis_offsets.items():
+                single_flags = {}
+                for flag_name, ind in SIPHOG_STATUS_BIT_POSITIONS.items():
+                    single_flags[flag_name] = nth_bit(message.status_info, ind+offset)
+                setattr(message, f"siphog_{ax}_status_bits", single_flags)
 
     #Individual decoders go here
     # TODO this might also go in the message type handler
@@ -278,7 +284,7 @@ class Binary_Scheme(Scheme):
                     #print(f"wrong length in format: {item}")
                     continue
                 format_str = "<" if BINARY_ENDIAN == "little" else ">"
-                format_code = NUMBER_TYPES[format_name]
+                format_code = NUMBER_TYPES.get(format_name, format_name)  # lookup name -> code. if not found, name itself is the code
                 format_str += format_code
                 chunk_size = struct.calcsize(format_str)
                 data_chunk = data[data_offset:data_offset+chunk_size]

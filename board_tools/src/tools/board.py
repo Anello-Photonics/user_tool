@@ -17,6 +17,7 @@ try:  # importing from inside the package
     from readable_scheme import *
     from rtcm_scheme import *
     from binary_scheme import *
+    from binary_and_ascii_scheme import Binary_and_ASCII_Scheme
     from message_scheme import Message
     from connection import *
     from class_configs.board_config import *
@@ -25,13 +26,18 @@ except ModuleNotFoundError:  # importing from outside the package
     from tools.readable_scheme import *
     from tools.rtcm_scheme import *
     from tools.binary_scheme import *
+    from tools.binary_and_ascii_scheme import Binary_and_ASCII_Scheme
     from tools.message_scheme import Message
     from tools.connection import *
     from tools.class_configs.board_config import *
     from tools.detect_os import os_type, processor_type
 
 debug = False
-COMMANDS_RETRY = 5 #retry limit for commands. mostly matters for USB with lower baud, large commands
+COMMANDS_RETRY = 5  # retry limit for commands. mostly matters for USB with lower baud, large commands
+
+# windows com port settings: latency timer can be 1 to 255 ms , default 16 ms
+DEFAULT_PORT_LATENCY_S = 0.016
+MAX_PORT_LATENCY_S = 0.255
 
 
 def debug_print(text):
@@ -292,7 +298,7 @@ class IMUBoard:
         for i in range(4):
             msg = self.read_one_message()
             debug_print(f"check_data_port message {i}: {msg}")
-            if msg and hasattr(msg, "msgtype") and msg.msgtype in [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG']:
+            if msg and hasattr(msg, "msgtype") and msg.msgtype in OUTPUT_MESSAGE_TYPES:
                 check_success = True
                 break
         #change uart or odr back if changed.
@@ -307,20 +313,18 @@ class IMUBoard:
         self.clear_control_port()
         # reset odometer port here? but need check for not exists/is dummy/is None
 
-    def clear_connection(self, connection, scheme):
+    def clear_connection(self, connection, scheme, wait_time_seconds):
         # temporarily set timeout to zero, and read data until read is empty
         connection.reset_input_buffer()
         old_timeout = connection.get_timeout()
         connection.set_timeout(0)
 
+        # read all data. then wait for delayed arrivals and read all data again.
         last_byte = connection.read(1)
         while len(last_byte) > 0:
             last_byte = connection.read(1)
 
-        # windows com port settings: latency timer is 1 to 255 ms , default 16 ms
-        # test_clear_connections on Windows laptop: there were 0.15 to 0.18s gaps at 16ms setting, 0.31 s at 255ms setting
-        max_port_latency_s = 0.255
-        time.sleep(max_port_latency_s * 2)  # use double the latency to make sure
+        time.sleep(wait_time_seconds)
 
         last_byte = connection.read(1)
         while len(last_byte) > 0:
@@ -347,10 +351,12 @@ class IMUBoard:
         connection.set_timeout(old_timeout)
 
     def clear_control_port(self):
-        self.clear_connection(self.control_connection, self.control_scheme)
+        # use shorter delay for control port clearing: used more often, less crucial to get all old messages
+        self.clear_connection(self.control_connection, self.control_scheme, DEFAULT_PORT_LATENCY_S)
 
     def clear_data_port(self):
-        self.clear_connection(self.data_connection, self.data_scheme)
+        # use longer delay for data port to make sure old outputs are cleared.  not called frequently.
+        self.clear_connection(self.data_connection, self.data_scheme, MAX_PORT_LATENCY_S*2)
 
     def release_connections(self):
         if hasattr(self, "data_connection"):
@@ -602,8 +608,7 @@ class IMUBoard:
             self.control_connection.set_baud(control_baud)
             self.control_baud = control_baud
             self.control_connection.reset_input_buffer()
-            response = self.ping()
-            if response and response.valid and response.msgtype == b'PNG':
+            if self.check_control_port():
                 data_baud = self.get_data_baud_flash()
                 self.data_baud = data_baud
                 self.data_connection.set_baud(data_baud)
@@ -637,13 +642,12 @@ class IMUBoard:
         data_con = DummyConnection()
         serial_con = DummyConnection()
 
-        print("\nmanually select ports")
         # connect to data port if we want to
         if set_data_port:
             connected = False
             while not connected:
                 try:
-                    print("\nselect data port (should be lowest of the 4 consecutive ports)")
+                    print("\nselect data port")
                     data_port = port_names[cutie.select(port_names, selected_index=0)]
                     if data_port == "cancel":
                         data_con.close() #disconnect in case it's needed
@@ -672,13 +676,14 @@ class IMUBoard:
             self.data_port_name = data_port
             self.control_connection = config_con
             self.control_port_name = "None"
+            self.data_baud = baud
             return True
 
         # connect to control port - need this to configure the board
         connected = False
         while not connected:
             try:
-                print("\nselect configuration port (should be highest of the 4 consecutive ports)")
+                print("\nselect configuration port")
                 control_port = port_names[cutie.select(port_names, selected_index=0)] #min(3, len(port_names)))]
                 if control_port == "cancel":
                     data_con.close()  # disconnect in case it's needed
@@ -725,10 +730,9 @@ class IMUBoard:
     # send a message on the control channel
     # we expect a response for each control message, so show an error if there is none.
     def send_control_message(self, message):
-        for i in range(3):
-            data = self.control_connection.readall() #read everything to clear any old responses
+        self.clear_control_port()
         self.control_scheme.write_one_message(message, self.control_connection)
-        time.sleep(1e-1) #wait for response, seems to need it if UDPConnection has timeout 0.
+        time.sleep(1e-1)  # wait for response, seems to need it if UDPConnection has timeout 0.
         resp = self.read_one_control_message()
         if resp:
             return resp
@@ -750,7 +754,7 @@ class IMUBoard:
             if not resp: # timeout , return None
                 return None
             # skip any output types, for firmware versions that output on both ports
-            if hasattr(resp, "msgtype") and resp.msgtype in [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG']:
+            if hasattr(resp, "msgtype") and resp.msgtype in OUTPUT_MESSAGE_TYPES:
                 continue
             return resp
 
@@ -1370,7 +1374,7 @@ class IMUBoard:
                             # show the name if there is one
                             named_value = VEH_VALUE_NAMES.get((code, raw_val), raw_val)
                             has_any_axis = True
-                        line += f"{axis}: {truncate_decimal(named_value, decimal_places)}    "
+                        line += f"{axis}: {truncate_decimal(named_value, decimal_places, 'm')}    "
                     # show the x,y,z grouping only if at least one was in the read.
                     if has_any_axis:
                         out_str += line
@@ -1396,7 +1400,7 @@ class IMUBoard:
                         elif raw_val == "1":
                             named_value = "Calibration in progress"
 
-                    line = f"\n    {name}: {truncate_decimal(named_value, decimal_places)}"
+                    line = f"\n    {name}: {truncate_decimal(named_value, decimal_places, 'm')}"
                     out_str += line
             return out_str
         else:
@@ -1438,12 +1442,17 @@ def show_and_pause(text):
     input()
 
 
-def truncate_decimal(num_or_str, places):
+def truncate_decimal(num_or_str, places, unit=None):
     try:
         # try to format with that many places as long as it can be converted to float
-        return f"{float(num_or_str):.{places}f}"
+        out_str = f"{float(num_or_str):.{places}f}"
+        # put the unit here if any
+        if unit is not None:
+            out_str += f" {unit}"
+        return out_str
     except (ValueError, TypeError):
         # if can't convert, just return the original thing (could be None, non-numerical string, etc)
+        # don't add the unit since it's non-numerical
         return num_or_str
 
 

@@ -18,15 +18,14 @@ BINARY_MSGTYPE_GP2 = 4
 BINARY_MSGTYPE_HDG = 5
 BINARY_MSGTYPE_INS = 6
 
-#all the allowed types. TODO - should this be an enum or dictionary?
-BINARY_MESSAGE_TYPES = [
-    BINARY_MSGTYPE_CAL,
-    BINARY_MSGTYPE_IMU,
-    BINARY_MSGTYPE_GPS,
-    BINARY_MSGTYPE_GP2,
-    BINARY_MSGTYPE_HDG,
-    BINARY_MSGTYPE_INS,
-]
+# sepearate message ids for X3 binary
+BINARY_MSGTYPE_X3_CAL = 255
+BINARY_MSGTYPE_X3_MCA = 254
+BINARY_MSGTYPE_X3_IMU = 253
+BINARY_MSGTYPE_X3_SIPHOG = 252
+BINARY_MSGTYPE_X3_MAG = 251
+BINARY_MSGTYPE_X3_IMX = 250
+
 
 # use this to tag messages with the same ascii message types
 BINARY_EQUIVALENT_MESSAGE_TYPES = {
@@ -36,6 +35,7 @@ BINARY_EQUIVALENT_MESSAGE_TYPES = {
     BINARY_MSGTYPE_GPS: b'GPS',
     BINARY_MSGTYPE_GP2: b'GP2',
     BINARY_MSGTYPE_HDG: b'HDG',
+    BINARY_MSGTYPE_X3_IMU: b'IMU',
 }
 
 # convert usual names to struct.pack/unpack codes. see: https://docs.python.org/3/library/struct.html
@@ -50,6 +50,8 @@ NUMBER_TYPES = {
     'uint32':   "I",
     'int64':    "q",
     'uint64':   "Q",
+    'float32':  "f",  # c float type
+    "float64":  "d",  # c double type
 }
 
 
@@ -120,3 +122,34 @@ BINARY_FORMAT_HDG = [
     ("relPosHeadingAcc_deg", "uint16", 1.0/100),
     ("flags", "uint16"),
 ]
+
+BINARY_FORMAT_X3_IMU = [
+    ("imu_time_ns", "uint64"),  #keep this, also convert to imu_time_ms
+    ("sync_time_ns", "uint64"), #keep this, also convert to sync_time_ms
+    ("accel_x_g", "int16", 0.0000305),  # also scaled by the accel range
+    ("accel_y_g", "int16", 0.0000305),
+    ("accel_z_g", "int16", 0.0000305),
+    ("angrate_x_dps", "int16", 0.000035),  # also scaled by the rate range
+    ("angrate_y_dps", "int16", 0.000035),
+    ("angrate_z_dps", "int16", 0.000035),
+    ("fog_angrate_x_dps", "int32", 1.0/10000000.0),
+    ("fog_angrate_y_dps", "int32", 1.0/10000000.0),
+    ("fog_angrate_z_dps", "int32", 1.0/10000000.0),
+    ("mag_x", "int16", 1.0/4096),  # in Gauss
+    ("mag_y", "int16", 1.0/4096),
+    ("mag_z", "int16", 1.0/4096),
+    ("temperature_c", "int16", 1.0/100.0),
+    ("mems_ranges", "uint16"),
+    ("fog_range", "uint16"),
+    ("status_info", "uint16")
+]
+
+# all the allowed types, code: format
+BINARY_MESSAGE_TYPES = {
+    BINARY_MSGTYPE_IMU: BINARY_FORMAT_IMU,
+    BINARY_MSGTYPE_GPS: BINARY_FORMAT_GPS,
+    BINARY_MSGTYPE_GP2: BINARY_FORMAT_GP2,
+    BINARY_MSGTYPE_HDG: BINARY_FORMAT_HDG,
+    BINARY_MSGTYPE_INS: BINARY_FORMAT_INS,
+    BINARY_MSGTYPE_X3_IMU: BINARY_FORMAT_X3_IMU,
+}
