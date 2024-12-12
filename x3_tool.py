@@ -14,26 +14,29 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import base64
     import socket
     import select
-    from configs_x3 import *
-    from ioloop import *
     import PySimpleGUI as sg
-    from convertLog_x3 import export_logs_detect_format# TODO - put under src directory?
     import random
     import io
-
-    parent_dir = str(pathlib.Path(__file__).parent)
-    sys.path.append(parent_dir+'/src')
-    from tools import *
-
-    from tools.x3_unit import X3_Unit
     import re
     import traceback
-    from file_picking import pick_one_file, pick_multiple_files
 
-    from log_config_x3 import log_board_config
+    parent_dir = str(pathlib.Path(__file__).parent)
+    BOARD_TOOLS_DIR = os.path.join(parent_dir, "board_tools")
+    SRC_DIR = os.path.join(BOARD_TOOLS_DIR, "src")
+    sys.path.append(BOARD_TOOLS_DIR)
+    sys.path.append(SRC_DIR)
+
+    from board_tools.src.tools import *
+    from board_tools.configs_x3 import *
+    from board_tools.ioloop import *
+    from board_tools.convertLog_x3 import export_logs_detect_format
+    from board_tools.src.tools.x3_unit import X3_Unit
+    from board_tools.file_picking import pick_one_file, pick_multiple_files
+    from board_tools.log_config_x3 import log_board_config
 
 X3_TOOL_VERSION = "1.0"
 
+LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
 
 #interface for A1 configuration and logging
 class UserProgram:
@@ -444,7 +447,7 @@ class UserProgram:
         #________________Top bar with log button and logo_______________________
         log_button = sg.Button(LOG_TEXT+TOGGLE_TEXT[self.log_on.value], key="log_button",  enable_events=True,
                                font=value_font, button_color=TOGGLE_COLORS[self.log_on.value])
-        anello_logo = sg.Image('anello_scaled.png', size=(300,80))
+        anello_logo = sg.Image(LOGO_PATH, size=(300, 80))
         buttons_row = [log_button, anello_logo]
 
         # ________________ IMU Data _______________________
@@ -639,7 +642,7 @@ class UserProgram:
             return
 
         # check OS bootloader compatible before starting, prevent update if no valid bootloader.
-        bootloader_name = self.board.find_bootloader_name()
+        bootloader_name = os.path.join(BOARD_TOOLS_DIR, self.board.find_bootloader_name())
         if bootloader_name is None:
             return
 

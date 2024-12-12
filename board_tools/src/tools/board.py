@@ -321,13 +321,13 @@ class IMUBoard:
 
         # read all data. then wait for delayed arrivals and read all data again.
         last_byte = connection.read(1)
-        while len(last_byte) > 0:
+        while (last_byte is not None) and len(last_byte) > 0:
             last_byte = connection.read(1)
 
         time.sleep(wait_time_seconds)
 
         last_byte = connection.read(1)
-        while len(last_byte) > 0:
+        while (last_byte is not None) and len(last_byte) > 0:
             last_byte = connection.read(1)
 
         # use read_one_message to clear any partial messages
@@ -1197,10 +1197,10 @@ class IMUBoard:
         # TODO should it check for 32 bit, or Windows ARM vs x86?
 
     # bootloader function taking hex file path and expected version after
-    def bootload_with_file_path(self, bootloader_name, hex_file_path, expected_version_after="unknown", num_attempts=1):
-        if bootloader_name is None:
+    def bootload_with_file_path(self, bootloader_path, hex_file_path, expected_version_after="unknown", num_attempts=1):
+        if bootloader_path is None:
             return
-        print(f"\nBootloading with {bootloader_name}")
+        print(f"\nBootloading with {bootloader_path}")
 
         print("\nKeep plugged in until upgrade finishes.")
         print("If bootload fails: cycle power, then connect user_program again to check firmware version.")
@@ -1212,15 +1212,15 @@ class IMUBoard:
 
         computer_os = os_type()
         if computer_os.lower() == "windows":
-            os.system(f".{os.sep}{bootloader_name} START TC36X 6 {port_number} 115200 0 0 0 0")
-            os.system(f".{os.sep}{bootloader_name} PROGRAM \"{hex_file_path}\"")
-            os.system(f".{os.sep}{bootloader_name} END")
+            os.system(f"{bootloader_path} START TC36X 6 {port_number} 115200 0 0 0 0")
+            os.system(f"{bootloader_path} PROGRAM \"{hex_file_path}\"")
+            os.system(f"{bootloader_path} END")
         elif computer_os.lower() == "linux":
             # on Linux: make executable first, and "sudo" all commands to make sure it has permissions.
-            os.system(f"sudo chmod +x {bootloader_name}")
-            os.system(f"sudo .{os.sep}{bootloader_name} START TC36X 6 {port_number} 115200 0 0 0 0")
-            os.system(f"sudo .{os.sep}{bootloader_name} PROGRAM \"{hex_file_path}\"")
-            os.system(f"sudo .{os.sep}{bootloader_name} END")
+            os.system(f"sudo chmod +x {bootloader_path}")
+            os.system(f"sudo {bootloader_path} START TC36X 6 {port_number} 115200 0 0 0 0")
+            os.system(f"sudo {bootloader_path} PROGRAM \"{hex_file_path}\"")
+            os.system(f"sudo {bootloader_path} END")
         else:
             # find_bootloader_name should already catch if OS not supported.
             show_and_pause(f"Bootloader does not support {computer_os} Operating System")
