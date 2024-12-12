@@ -185,9 +185,7 @@ EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
 EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
                      "accel_x_g", "accel_y_g", "accel_z_g",
-                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps",
-                     "fog_angrate_x_dps", "fog_angrate_y_dps", "fog_angrate_z_dps",
-                     "mag_x", "mag_y", "mag_z",
+                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps", "fog_angrate_z_dps",
                      "odometer_speed_mps", "odometer_time_ms",
                      "temperature_c"]
 
