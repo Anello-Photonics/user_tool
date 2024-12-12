@@ -1212,15 +1212,17 @@ class IMUBoard:
 
         computer_os = os_type()
         if computer_os.lower() == "windows":
-            os.system(f"{bootloader_path} START TC36X 6 {port_number} 115200 0 0 0 0")
-            os.system(f"{bootloader_path} PROGRAM \"{hex_file_path}\"")
-            os.system(f"{bootloader_path} END")
+            subprocess.call([bootloader_path, 'START', 'TC36X', '6', str(port_number), '115200', '0', '0', '0', '0'])
+            subprocess.call([bootloader_path, 'PROGRAM', hex_file_path])
+            subprocess.call([bootloader_path, 'END'])
+
         elif computer_os.lower() == "linux":
-            # on Linux: make executable first, and "sudo" all commands to make sure it has permissions.
-            os.system(f"sudo chmod +x {bootloader_path}")
-            os.system(f"sudo {bootloader_path} START TC36X 6 {port_number} 115200 0 0 0 0")
-            os.system(f"sudo {bootloader_path} PROGRAM \"{hex_file_path}\"")
-            os.system(f"sudo {bootloader_path} END")
+            # on Linux: make the bootloader executable first, and "sudo" all commands to make sure it has permissions.
+            subprocess.call(['sudo', 'chmod', '+x', bootloader_path])
+            subprocess.call(['sudo', bootloader_path, 'START', 'TC36X', '6', str(port_number), '115200', '0', '0', '0', '0'])
+            subprocess.call(['sudo', bootloader_path, 'PROGRAM', hex_file_path])
+            subprocess.call(['sudo', bootloader_path, 'END'])
+        
         else:
             # find_bootloader_name should already catch if OS not supported.
             show_and_pause(f"Bootloader does not support {computer_os} Operating System")
