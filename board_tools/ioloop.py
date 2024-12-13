@@ -15,7 +15,9 @@ import select
 parent_dir = str(pathlib.Path(__file__).parent)
 sys.path.append(parent_dir+'/src')
 from tools import *
-from user_program_config import *
+from user_program_config import debug_print, CONNECT_RETRIES, FLUSH_FREQUENCY, \
+    NTRIP_TIMEOUT_SECONDS, NTRIP_RETRY_SECONDS, NTRIP_READ_INTERVAL_SECONDS,\
+    NTRIP_MAX_BYTES_PER_INTERVAL, NTRIP_MAX_BYTES_PER_WRITE
 
 def open_log_file(location, name): #ioloop - goes in that file
     # location needs to double any slashes \\ - otherwise we risk \b or other special characters

@@ -1,7 +1,7 @@
 #__________Main user program configs__________:
 DEBUG = False
 import time
-
+import os
 
 def debug_print(text):
     if DEBUG:
@@ -166,8 +166,8 @@ BCAL_LEVER_ARM_WAIT_SECONDS = 3
 #UDP constants
 #A1_port1 = UDP_LOCAL_DATA_PORT
 #A1_port2 = UDP_LOCAL_CONFIG_PORT
-UDP_CACHE = "udp_settings.txt"
-NTRIP_CACHE = "ntrip_settings.txt"
+UDP_CACHE = os.path.join("board_tools", "udp_settings.txt")
+NTRIP_CACHE = os.path.join("board_tools", "ntrip_settings.txt")
 NTRIP_TIMEOUT_SECONDS = 2
 NTRIP_RETRY_SECONDS = 30
 #NTRIP_READ_SIZE = 2048 # how much it reads from caster at once
@@ -185,9 +185,7 @@ EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
 EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
                      "accel_x_g", "accel_y_g", "accel_z_g",
-                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps",
-                     "fog_angrate_x_dps", "fog_angrate_y_dps", "fog_angrate_z_dps",
-                     "mag_x", "mag_y", "mag_z",
+                     "angrate_x_dps", "angrate_y_dps", "angrate_z_dps", "fog_angrate_z_dps",
                      "odometer_speed_mps", "odometer_time_ms",
                      "temperature_c"]
 
@@ -306,7 +304,7 @@ MAP_ARROW_SIZE = 50
 MAP_ZOOM_MAX = 18 #19 is max for OSM but stamen-terrain seems to only go to 18. TODO - separate min and max for each provider?
 MAP_ZOOM_MIN = 8 #could go down to 1=whole earth, but 3 and below have some load errors
 MAP_ZOOM_DEFAULT = 16
-DEFAULT_MAP_IMAGE = "map/default_map.png"
+DEFAULT_MAP_IMAGE = "default_map.png"
 MAP_DIMENSIONS = (1000, 700)
 MAX_CACHE_TILES = 2000 #max tiles in map LRU cache in case of memory limit. TODO - calculate how many we can fit in memory.
 # at office: 700x500 pixel map was 9 or 12 tiles, full zoom range with osm and stamen-terrain was 240 total

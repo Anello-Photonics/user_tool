@@ -223,11 +223,11 @@ class UDPConnection(Connection):
 	# def get_port(self):
 	# 	pass
 	#
-	# def set_timeout(self):
-	# 	pass
-	#
-	# def get_timeout(self):
-	# 	pass
+	def set_timeout(self, timeout):
+		self.sock.settimeout(timeout)
+
+	def get_timeout(self):
+		return self.sock.gettimeout()
 
 
 # fake a serial connection to read byte data from a file

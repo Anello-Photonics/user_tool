@@ -18,6 +18,11 @@ def int_to_ascii(x):
     return "{0:0{1}X}".format(x,2).encode()
 
 
+# get one bit from a combined flags integer
+def nth_bit(combined_val, position):
+    return (combined_val >> position) & 1
+
+
 #extract flags as a separate function independent of paylod -> can use it in RTCM too.
 def extract_flags_HDG(message):
     if hasattr(message, "flags"):
@@ -219,9 +224,20 @@ class ReadableScheme(Scheme):
         #this relies on each format having different length.
         num_commas = payload.count(READABLE_PAYLOAD_SEPARATOR)
 
-        for msg_format in [FORMAT_IMU_WITH_SYNC, FORMAT_IMU_NO_SYNC, FORMAT_IMU_X3, FORMAT_IMU_3FOG]:
+        for msg_format in [FORMAT_IMU_WITH_SYNC, FORMAT_IMU_NO_SYNC, FORMAT_IMU_X3_NO_STATUS, FORMAT_IMU_X3_WITH_STATUS, FORMAT_IMU_3FOG]:
             if num_commas == len(msg_format) - 1:
                 self.set_fields_from_list(message, msg_format, payload)
+
+                # split X3 status bit fields
+                for bitfield_name in ["siphog_x_status", "siphog_y_status", "siphog_z_status"]:
+                    if not hasattr(message, bitfield_name):
+                        continue
+                    combined_val = getattr(message, bitfield_name)
+                    single_flags = {}
+                    for flag_name, ind in SIPHOG_STATUS_BIT_POSITIONS.items():
+                        single_flags[flag_name] = nth_bit(combined_val, ind)
+                    setattr(message, f"{bitfield_name}_bits", single_flags)
+
                 break
 
         else:
