@@ -80,6 +80,7 @@ class UserProgram:
 
         #any features which might or not be there - do based on firmware version?
         self.available_configs = []
+        self.available_configs_ramonly = []
         self.show_gps_info = True
 
         #self.map_cache = {} #cache for map tiles. or could use lru.LRU[max_items] to avoid overfilling
@@ -433,6 +434,11 @@ class UserProgram:
         field_codes = [code for code in self.available_configs if code in CFG_CODES_TO_NAMES]
         field_names = [CFG_CODES_TO_NAMES[code] for code in field_codes]
 
+        # ram only configs
+        available_ram_only = [code for code in self.available_configs_ramonly if code in RAM_ONLY_CONFIGS]
+        field_codes += available_ram_only
+        field_names += [RAM_ONLY_CONFIGS[code] for code in available_ram_only]
+
         # cutie select for index, including cancel.
         # TODO - if bidict, can do name = options[cutie.select(options)], code = dict[name] , instead of index
         options = field_names + ["cancel"]
@@ -487,13 +493,23 @@ class UserProgram:
             args2 = {"odo": b'on'}
             resp = self.retry_command(method=self.board.set_cfg_flash, args=[args2], response_types=[b'CFG', b'ERR'])
 
-        resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
+        if code in RAM_ONLY_CONFIGS:
+            set_method = self.board.set_cfg
+        else:
+            set_method = self.board.set_cfg_flash
+        resp = self.retry_command(method=set_method, args=[args], response_types=[b'CFG', b'ERR'])
         if not proper_response(resp, b'CFG'):
             show_and_pause("") # proper_response already shows error, just pause to see it.
 
     # read and show all user configurations
     def read_all_configs(self, board):
         resp = self.retry_command(method=board.get_cfg_flash, args=[[]], response_types=[b'CFG'])
+
+        ram_only_configs = list(RAM_ONLY_CONFIGS.keys())
+        ram_resp = self.retry_command(
+            method=board.get_cfg, args=[ram_only_configs], response_types=[b"CFG"]
+        )
+
         if proper_response(resp, b'CFG'):
             configs_dict = resp.configurations
             # hide alignment config below 1.2.0
@@ -511,6 +527,20 @@ class UserProgram:
                     else:
                         value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
                     print("\t" + full_name + ":\t" + value_name)
+
+            # all ram-only ones at the end
+            if proper_response(ram_resp, b"CFG"):
+                ram_config_dict = ram_resp.configurations
+                self.available_configs_ramonly = list(ram_config_dict.keys())
+                for cfg_field_code in ram_config_dict:
+                    if cfg_field_code in RAM_ONLY_CONFIGS:
+                        full_name = RAM_ONLY_CONFIGS[cfg_field_code]
+                        value_code = ram_resp.configurations[cfg_field_code].decode()
+                        value_name = CFG_VALUE_NAMES.get(
+                            (cfg_field_code, value_code), value_code
+                        )
+                        print("\t" + full_name + ":\t" + value_name)
+
             return True
         else:
             show_and_pause(f"Error reading unit configs. Try again or check cables.\n")

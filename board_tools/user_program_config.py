@@ -77,6 +77,12 @@ CFG_CODES_TO_NAMES = {
     "nmea":         "NMEA messages enabled                   ",
     "nmea_rate":    "NMEA output rate (Hz)                   ",
     "dir_det":      "Forward/Backward Detection              ",
+    "ahrs":         "AHRS Message Control                    ",
+}
+
+RAM_ONLY_CONFIGS = {
+    "azupt":        "AHRS ZUPT Toggle                        ",
+    "ahdg":         "AHRS User Heading                       ",
 }
 
 # UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
@@ -113,6 +119,8 @@ CFG_VALUE_OPTIONS = {
     "nmea": ["0", "1", "2", "3", "4", "5", "6", "7"],
     "dir_det": ['on', 'off'],
     "nmea_rate": ["1", "2", "4", "5"],
+    "ahrs": ['0', '1'],
+    "azupt": ['0', '1'],
 }
 RS232_BAUDS = ["19200", "57600", "115200", "230400"]
 
@@ -134,6 +142,10 @@ CFG_VALUE_NAMES = {
     ("ntrip", "2"): "ethernet",
     ("orn", "+X+Y+Z"): "+X+Y+Z (Forward-Right-Down)",  # give special names to the two most common orientations.
     ("orn", "+Y+X-Z"): "+Y+X-Z (Right-Forward-Up)",
+    ("ahrs", "1"): "on",
+    ("ahrs", "0"): "off",
+    ("azupt", "1"): "on",
+    ("azupt", "0"): "off",
 }
 
 # ORN options, now moved into CFG_VALUE_OPTIONS.
