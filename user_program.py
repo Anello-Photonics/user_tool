@@ -498,17 +498,20 @@ class UserProgram:
         else:
             set_method = self.board.set_cfg_flash
         resp = self.retry_command(method=set_method, args=[args], response_types=[b'CFG', b'ERR'])
-        if not proper_response(resp, b'CFG'):
+        if not proper_response(resp, b'CFG', print_error=True):
             show_and_pause("") # proper_response already shows error, just pause to see it.
 
     # read and show all user configurations
     def read_all_configs(self, board):
         resp = self.retry_command(method=board.get_cfg_flash, args=[[]], response_types=[b'CFG'])
 
+        # read ram configs- this will retry on connection errors (1,3,4)
+        # but fails fast on invaid value error which will happen if config doesn't exist
         ram_only_configs = list(RAM_ONLY_CONFIGS.keys())
         ram_resp = self.retry_command(
-            method=board.get_cfg, args=[ram_only_configs], response_types=[b"CFG"]
+            method=board.get_cfg, args=[ram_only_configs], response_types=[b"CFG", b"ERR"]
         )
+        # TODO - should it do individual ram config reads, in case firmware has some but not others?
 
         if proper_response(resp, b'CFG'):
             configs_dict = resp.configurations
@@ -1735,7 +1738,7 @@ class UserProgram:
                 if output_msg.msgtype == b'ERR' and output_msg.msgtype in connection_errors:
                     continue
                 # invalid response message or unexpected response type: retry
-                if not proper_response(output_msg, response_types):
+                if not proper_response(output_msg, response_types): # TODO - turn off error prints on this check?
                     continue
                 else:
                     return output_msg
@@ -1821,19 +1824,22 @@ def date_time(): #UserProgram
     # or time.strftime(format[,t])
 
 
-def proper_response(message, expected_types): #UserProgram
+def proper_response(message, expected_types, print_error=False): #UserProgram
     if not message:
         return False
     if not message.valid:  # actual problem with the message format or checksum fail, don't expect this
-        print("\nMessage parsing error: "+message.error)
+        if print_error:
+            print("\nMessage parsing error: "+message.error)
         return False
     elif message.msgtype in expected_types:
         return True
     elif message.msgtype == b'ERR':  # Error message, like if you sent a bad request
-        print("\nError: " + ERROR_CODES[message.err])
+        if print_error:
+            print("\nError: " + ERROR_CODES[message.err])
         return False
     else:
-        print('\nUnexpected response type: '+message.msgtype.decode())
+        if print_error:
+            print('\nUnexpected response type: '+message.msgtype.decode())
         return False
 
 
