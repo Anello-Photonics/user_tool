@@ -80,6 +80,7 @@ class UserProgram:
 
         #any features which might or not be there - do based on firmware version?
         self.available_configs = []
+        self.available_configs_ramonly = []
         self.show_gps_info = True
 
         #self.map_cache = {} #cache for map tiles. or could use lru.LRU[max_items] to avoid overfilling
@@ -433,6 +434,11 @@ class UserProgram:
         field_codes = [code for code in self.available_configs if code in CFG_CODES_TO_NAMES]
         field_names = [CFG_CODES_TO_NAMES[code] for code in field_codes]
 
+        # ram only configs
+        available_ram_only = [code for code in self.available_configs_ramonly if code in RAM_ONLY_CONFIGS]
+        field_codes += available_ram_only
+        field_names += [RAM_ONLY_CONFIGS[code] for code in available_ram_only]
+
         # cutie select for index, including cancel.
         # TODO - if bidict, can do name = options[cutie.select(options)], code = dict[name] , instead of index
         options = field_names + ["cancel"]
@@ -441,11 +447,17 @@ class UserProgram:
             return
         args = {}
         name, code = field_names[selected_index], field_codes[selected_index]
+
+        # configs which enter in unique ways
         if code == "aln":
             print("\nEnter alignment angles")
             value = form_aln_string_prompt()
         elif code == "nmea":
             value = form_nmea_value_prompt()
+        elif code == "ahdg":
+            value = form_ahdg_string_prompt()
+
+        # configs with defined list of options: pick from a menu
         elif code in CFG_VALUE_OPTIONS:
             print("\nselect " + name)
             value_options = CFG_VALUE_OPTIONS[code].copy()
@@ -468,6 +480,8 @@ class UserProgram:
 
             value_option_names = [CFG_VALUE_NAMES.get((code, opt), opt) for opt in value_options]  # cfg and vale code -> value name
             value = value_options[cutie.select(value_option_names)]
+
+        # configs which you type in
         elif code in CFG_FIELD_EXAMPLES:
             print("\nEnter value for " + name + " " + CFG_FIELD_EXAMPLES[code])
             value = input()
@@ -476,24 +490,37 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
-        #if connected by udp, changing udp settings can disconnect - give warning
+        # if connected by udp, changing udp settings can disconnect - give warning
         if code in UDP_FIELDS and self.connection_info["type"] == "UDP":
             change_anyway = cutie.prompt_yes_or_no("Changing UDP settings while connected by UDP may close the connection. Change anyway?")
             if not change_anyway:
                 return
 
-        #if setting odometer unit, first set odometer to on, then set the unit
+        # if setting odometer unit, first set odometer to on, then set the unit
         if code == "odo":
             args2 = {"odo": b'on'}
             resp = self.retry_command(method=self.board.set_cfg_flash, args=[args2], response_types=[b'CFG', b'ERR'])
 
-        resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
-        if not proper_response(resp, b'CFG'):
+        if code in RAM_ONLY_CONFIGS:
+            set_method = self.board.set_cfg
+        else:
+            set_method = self.board.set_cfg_flash
+        resp = self.retry_command(method=set_method, args=[args], response_types=[b'CFG', b'ERR'])
+        if not proper_response(resp, b'CFG', print_error=True):
             show_and_pause("") # proper_response already shows error, just pause to see it.
 
     # read and show all user configurations
     def read_all_configs(self, board):
         resp = self.retry_command(method=board.get_cfg_flash, args=[[]], response_types=[b'CFG'])
+
+        # read ram configs- this will retry on connection errors (1,3,4)
+        # but fails fast on invaid value error which will happen if config doesn't exist
+        ram_only_configs = list(RAM_ONLY_CONFIGS.keys())
+        ram_resp = self.retry_command(
+            method=board.get_cfg, args=[ram_only_configs], response_types=[b"CFG", b"ERR"]
+        )
+        # TODO - should it do individual ram config reads, in case firmware has some but not others?
+
         if proper_response(resp, b'CFG'):
             configs_dict = resp.configurations
             # hide alignment config below 1.2.0
@@ -511,6 +538,25 @@ class UserProgram:
                     else:
                         value_name = CFG_VALUE_NAMES.get((cfg_field_code, value_code), value_code)
                     print("\t" + full_name + ":\t" + value_name)
+
+            # all ram-only ones at the end
+            if proper_response(ram_resp, b"CFG"):
+                ram_config_dict = ram_resp.configurations
+                self.available_configs_ramonly = list(ram_config_dict.keys())
+                for cfg_field_code in ram_config_dict:
+                    if cfg_field_code not in RAM_ONLY_CONFIGS:
+                        continue
+                    full_name = RAM_ONLY_CONFIGS[cfg_field_code]
+                    value_code = ram_resp.configurations[cfg_field_code].decode()
+                    value_name = CFG_VALUE_NAMES.get(
+                        (cfg_field_code, value_code), value_code
+                    )
+                    # convert ahdg back to fractional degrees before showing it.
+                    if cfg_field_code == "ahdg":
+                        value_name = '%.3f' % (float(value_name) * 1e-3)
+
+                    print("\t" + full_name + ":\t" + value_name)
+
             return True
         else:
             show_and_pause(f"Error reading unit configs. Try again or check cables.\n")
@@ -1705,7 +1751,7 @@ class UserProgram:
                 if output_msg.msgtype == b'ERR' and output_msg.msgtype in connection_errors:
                     continue
                 # invalid response message or unexpected response type: retry
-                if not proper_response(output_msg, response_types):
+                if not proper_response(output_msg, response_types): # TODO - turn off error prints on this check?
                     continue
                 else:
                     return output_msg
@@ -1791,19 +1837,22 @@ def date_time(): #UserProgram
     # or time.strftime(format[,t])
 
 
-def proper_response(message, expected_types): #UserProgram
+def proper_response(message, expected_types, print_error=False): #UserProgram
     if not message:
         return False
     if not message.valid:  # actual problem with the message format or checksum fail, don't expect this
-        print("\nMessage parsing error: "+message.error)
+        if print_error:
+            print("\nMessage parsing error: "+message.error)
         return False
     elif message.msgtype in expected_types:
         return True
     elif message.msgtype == b'ERR':  # Error message, like if you sent a bad request
-        print("\nError: " + ERROR_CODES[message.err])
+        if print_error:
+            print("\nError: " + ERROR_CODES[message.err])
         return False
     else:
-        print('\nUnexpected response type: '+message.msgtype.decode())
+        if print_error:
+            print('\nUnexpected response type: '+message.msgtype.decode())
         return False
 
 
@@ -1871,6 +1920,13 @@ def form_position_unc_string_prompt():
     h_acc = cutie.get_number(prompt="horizontal accuracy (m): ")
     v_acc = cutie.get_number(prompt="vertical accuracy (m): ")
     return f"{h_acc:+.6f}{v_acc:+.6f}"  # TODO - check how many decimal places needed
+
+
+# ahdg is stored as integer number of millidegrees. convert it from degrees with decimal point
+# firmware wraps values around to be in -180 to 180 range. so allow entering values outside that.
+def form_ahdg_string_prompt():
+    angle_degrees = cutie.get_number(prompt="\nAHRS User Heading (degrees): ", allow_float=True)
+    return str(round(angle_degrees * 1000))
 
 
 def form_heading_string_prompt():
