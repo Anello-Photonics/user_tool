@@ -82,7 +82,7 @@ CFG_CODES_TO_NAMES = {
 
 RAM_ONLY_CONFIGS = {
     "azupt":        "AHRS ZUPT Toggle                        ",
-    "ahdg":         "AHRS User Heading                       ",
+    "ahdg":         "AHRS User Heading (degrees)             ",
 }
 
 # UDP_FIELD_INDICES = [5, 6, 7, 8, 9]  # udp related field positions in CFG_FIELD_NAMES / CODES
@@ -119,8 +119,8 @@ CFG_VALUE_OPTIONS = {
     "nmea": ["0", "1", "2", "3", "4", "5", "6", "7"],
     "dir_det": ['on', 'off'],
     "nmea_rate": ["1", "2", "4", "5"],
-    "ahrs": ['0', '1'],
-    "azupt": ['0', '1'],
+    "ahrs": ['1', '0'],
+    "azupt": ['1', '0'],
 }
 RS232_BAUDS = ["19200", "57600", "115200", "230400"]
 

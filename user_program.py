@@ -447,11 +447,17 @@ class UserProgram:
             return
         args = {}
         name, code = field_names[selected_index], field_codes[selected_index]
+
+        # configs which enter in unique ways
         if code == "aln":
             print("\nEnter alignment angles")
             value = form_aln_string_prompt()
         elif code == "nmea":
             value = form_nmea_value_prompt()
+        elif code == "ahdg":
+            value = form_ahdg_string_prompt()
+
+        # configs with defined list of options: pick from a menu
         elif code in CFG_VALUE_OPTIONS:
             print("\nselect " + name)
             value_options = CFG_VALUE_OPTIONS[code].copy()
@@ -474,6 +480,8 @@ class UserProgram:
 
             value_option_names = [CFG_VALUE_NAMES.get((code, opt), opt) for opt in value_options]  # cfg and vale code -> value name
             value = value_options[cutie.select(value_option_names)]
+
+        # configs which you type in
         elif code in CFG_FIELD_EXAMPLES:
             print("\nEnter value for " + name + " " + CFG_FIELD_EXAMPLES[code])
             value = input()
@@ -482,13 +490,13 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
-        #if connected by udp, changing udp settings can disconnect - give warning
+        # if connected by udp, changing udp settings can disconnect - give warning
         if code in UDP_FIELDS and self.connection_info["type"] == "UDP":
             change_anyway = cutie.prompt_yes_or_no("Changing UDP settings while connected by UDP may close the connection. Change anyway?")
             if not change_anyway:
                 return
 
-        #if setting odometer unit, first set odometer to on, then set the unit
+        # if setting odometer unit, first set odometer to on, then set the unit
         if code == "odo":
             args2 = {"odo": b'on'}
             resp = self.retry_command(method=self.board.set_cfg_flash, args=[args2], response_types=[b'CFG', b'ERR'])
@@ -536,13 +544,18 @@ class UserProgram:
                 ram_config_dict = ram_resp.configurations
                 self.available_configs_ramonly = list(ram_config_dict.keys())
                 for cfg_field_code in ram_config_dict:
-                    if cfg_field_code in RAM_ONLY_CONFIGS:
-                        full_name = RAM_ONLY_CONFIGS[cfg_field_code]
-                        value_code = ram_resp.configurations[cfg_field_code].decode()
-                        value_name = CFG_VALUE_NAMES.get(
-                            (cfg_field_code, value_code), value_code
-                        )
-                        print("\t" + full_name + ":\t" + value_name)
+                    if cfg_field_code not in RAM_ONLY_CONFIGS:
+                        continue
+                    full_name = RAM_ONLY_CONFIGS[cfg_field_code]
+                    value_code = ram_resp.configurations[cfg_field_code].decode()
+                    value_name = CFG_VALUE_NAMES.get(
+                        (cfg_field_code, value_code), value_code
+                    )
+                    # convert ahdg back to fractional degrees before showing it.
+                    if cfg_field_code == "ahdg":
+                        value_name = '%.3f' % (float(value_name) * 1e-3)
+
+                    print("\t" + full_name + ":\t" + value_name)
 
             return True
         else:
@@ -1907,6 +1920,13 @@ def form_position_unc_string_prompt():
     h_acc = cutie.get_number(prompt="horizontal accuracy (m): ")
     v_acc = cutie.get_number(prompt="vertical accuracy (m): ")
     return f"{h_acc:+.6f}{v_acc:+.6f}"  # TODO - check how many decimal places needed
+
+
+# ahdg is stored as integer number of millidegrees. convert it from degrees with decimal point
+# firmware wraps values around to be in -180 to 180 range. so allow entering values outside that.
+def form_ahdg_string_prompt():
+    angle_degrees = cutie.get_number(prompt="\nAHRS User Heading (degrees): ", allow_float=True)
+    return str(round(angle_degrees * 1000))
 
 
 def form_heading_string_prompt():
