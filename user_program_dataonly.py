@@ -13,12 +13,7 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import base64
     import socket
     import select
-    from user_program_config import *
-    from version_num import PROGRAM_VERSION
-    from ioloop import *
     import PySimpleGUI as sg
-    from convertLog import export_logs_detect_format# TODO - put under src directory?
-    from map.geotiler_demo import draw_map, draw_dial
     import random
     import io
     try: #get pylru if possible, otherwise will use dictionary
@@ -27,13 +22,25 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
         pass #prints blocked here, but should indicate an error in map
 
     parent_dir = str(pathlib.Path(__file__).parent)
-    sys.path.append(parent_dir+'/src')
-    from tools import *
 
-    import re
-    import traceback
-    from file_picking import pick_one_file, pick_multiple_files
+    BOARD_TOOLS_DIR = os.path.join(parent_dir, "board_tools")
+    SRC_DIR = os.path.join(BOARD_TOOLS_DIR, "src")
+    MAP_DIR = os.path.join(BOARD_TOOLS_DIR, "map")
+    sys.path.append(BOARD_TOOLS_DIR)
+    sys.path.append(SRC_DIR)
+    sys.path.append(MAP_DIR)
+    from board_tools.src.tools import *
+    from board_tools.user_program_config import *
+    from board_tools.version_num import PROGRAM_VERSION
+    from board_tools.ioloop import *
+    from board_tools.convertLog import export_logs_detect_format
+    from board_tools.map.geotiler_demo import draw_map, draw_dial
+    from board_tools.file_picking import pick_one_file, pick_multiple_files
+    from board_tools.log_config import log_board_config
 
+LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+DEFAULT_MAP_IMG_PATH = os.path.join(MAP_DIR, DEFAULT_MAP_IMAGE)
+ARROW_FILE_PATH = os.path.join(MAP_DIR, ARROW_FILE_NAME)
 
 #interface for A1 configuration and logging
 class UserProgram:
@@ -497,7 +504,7 @@ class UserProgram:
         time_since_gps = sg.Text(MONITOR_DEFAULT_VALUE, key="since_gps", size=MONITOR_TIME_SIZE, font=label_font)
         time_since_ins_label = sg.Text("Last INS (s): ", size=MONITOR_TIMELABEL_SIZE, font=label_font)
         time_since_ins = sg.Text(MONITOR_DEFAULT_VALUE, key="since_ins", size=MONITOR_TIME_SIZE, font=label_font)
-        anello_logo = sg.Image('anello_scaled.png', size=(300,80))
+        anello_logo = sg.Image(LOGO_PATH, size=(300,80))
 
         #gps message fields in the ins tab. keep these for now. they have 2 in name/key, vs ones in gps tab don't have 2
         gps_carrsoln_label2 = sg.Text("Carrier Soln:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
@@ -798,7 +805,7 @@ class UserProgram:
         #MAP_INITIAL_SIZE = 200  # does this need a default?
         # image to hold geotiler map: create the element first and update it later
         try:
-            map_image = sg.Image(DEFAULT_MAP_IMAGE, size=MAP_DIMENSIONS) #TODO - make it a constant, set the size too.
+            map_image = sg.Image(DEFAULT_MAP_IMG_PATH, size=MAP_DIMENSIONS)
         except Exception as e:
             map_image = sg.Image() #(key="-IMAGE-")  # does it need the key?
         # bio = io.BytesIO() #for storing images, but doesn't update properly out here
@@ -1046,7 +1053,7 @@ class UserProgram:
                         if (lat is not None) and (lon is not None) and (heading is not None):
                             #tried to suppress map error prints with no internet, but doesn't work.
                             #with open(os.devnull, "w") as f, redirect_stdout(f):
-                            pil_image = draw_map(lat, lon, current_zoom, MAP_DIMENSIONS, MAP_ARROW_SIZE, heading, arrow_file_path, provider, storage=self.map_cache)
+                            pil_image = draw_map(lat, lon, current_zoom, MAP_DIMENSIONS, MAP_ARROW_SIZE, heading, ARROW_FILE_PATH, provider, storage=self.map_cache)
                             bio = io.BytesIO()  # todo- does this accumulate memory? but if bio outside loop, image does't update
                             pil_image.save(bio, format="PNG")  # put it in memory to load
                             map_image.update(data=bio.getvalue()) #todo - check actual window size and handle resizes?
