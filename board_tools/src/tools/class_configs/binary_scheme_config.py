@@ -11,30 +11,25 @@ BINARY_ENDIAN = "little"
 BINARY_CRC_LEN = 2
 
 # binary  message types are numbers
-BINARY_MSGTYPE_CAL = 1
 BINARY_MSGTYPE_IMU = 2
 BINARY_MSGTYPE_GPS = 3
 BINARY_MSGTYPE_GP2 = 4
 BINARY_MSGTYPE_HDG = 5
 BINARY_MSGTYPE_INS = 6
-
+BINARY_MSGTYPE_INF = 7
+BINARY_MSGTYPE_AHRS = 10
 # sepearate message ids for X3 binary
-BINARY_MSGTYPE_X3_CAL = 255
-BINARY_MSGTYPE_X3_MCA = 254
 BINARY_MSGTYPE_X3_IMU = 253
-BINARY_MSGTYPE_X3_SIPHOG = 252
-BINARY_MSGTYPE_X3_MAG = 251
-BINARY_MSGTYPE_X3_IMX = 250
 
 
 # use this to tag messages with the same ascii message types
 BINARY_EQUIVALENT_MESSAGE_TYPES = {
-    BINARY_MSGTYPE_CAL: b'CAL',
     BINARY_MSGTYPE_IMU: b'IMU',
     BINARY_MSGTYPE_INS: b'INS',
     BINARY_MSGTYPE_GPS: b'GPS',
     BINARY_MSGTYPE_GP2: b'GP2',
     BINARY_MSGTYPE_HDG: b'HDG',
+    BINARY_MSGTYPE_AHRS: b'AHRS',
     BINARY_MSGTYPE_X3_IMU: b'IMU',
 }
 
@@ -87,7 +82,7 @@ BINARY_FORMAT_INS = [
     ("pitch_deg", "int16", 1.0/100),
     ("heading_deg", "int16", 1.0/100),
     ("zupt_flag", "uint8"),
-    ("ins_solution_status_and_gps_used", "uint8"),
+    ("ins_solution_status_and_gps_used", "uint8"), #was "status" in the documentation - is it ins_solution_status?
 ]
 
 BINARY_FORMAT_GPS = [
@@ -132,16 +127,27 @@ BINARY_FORMAT_X3_IMU = [
     ("angrate_x_dps", "int16", 0.000035),  # also scaled by the rate range
     ("angrate_y_dps", "int16", 0.000035),
     ("angrate_z_dps", "int16", 0.000035),
-    ("fog_angrate_x_dps", "int32", 1.0/10000000.0),
-    ("fog_angrate_y_dps", "int32", 1.0/10000000.0),
-    ("fog_angrate_z_dps", "int32", 1.0/10000000.0),
-    ("mag_x", "int16", 1.0/4096),  # in Gauss
+    ("fog_angrate_x_dps", "int32", 1.0/(pow(2, 31) - 1)),
+    ("fog_angrate_y_dps", "int32", 1.0/(pow(2, 31) - 1)),
+    ("fog_angrate_z_dps", "int32", 1.0/(pow(2, 31) - 1)),
+    ("mag_x", "int16", 1.0/4096), # in Gauss - todo check what are normal field levels
     ("mag_y", "int16", 1.0/4096),
     ("mag_z", "int16", 1.0/4096),
     ("temperature_c", "int16", 1.0/100.0),
     ("mems_ranges", "uint16"),
     ("fog_range", "uint16"),
+    # 3 status bitfields of 4 bits each: how to read that?
+    #("siphog_x_status_byte", )
     ("status_info", "uint16")
+]
+
+BINARY_FORMAT_AHRS = [
+    ("imu_time_ns", "uint64"),
+    ("sync_time_ns", "uint64"),
+    ("roll_deg", "float32"),
+    ("pitch_deg", "float32"),
+    ("heading_deg", "float32"),
+    ("zupt_flag", "uint8"),
 ]
 
 # all the allowed types, code: format
@@ -152,4 +158,5 @@ BINARY_MESSAGE_TYPES = {
     BINARY_MSGTYPE_HDG: BINARY_FORMAT_HDG,
     BINARY_MSGTYPE_INS: BINARY_FORMAT_INS,
     BINARY_MSGTYPE_X3_IMU: BINARY_FORMAT_X3_IMU,
+    BINARY_MSGTYPE_AHRS: BINARY_FORMAT_AHRS,
 }

@@ -166,6 +166,7 @@ class UDPConnection(Connection):
 
 	def read(self, size=1):
 		try:
+			self.set_timeout(0)
 			reply, addr = self.sock.recvfrom(size) # buffsize < message length will error
 			return reply
 		except Exception as e: #would be BlockingIOError when no data and timeout 0
@@ -228,7 +229,6 @@ class UDPConnection(Connection):
 
 	def get_timeout(self):
 		return self.sock.gettimeout()
-
 
 # fake a serial connection to read byte data from a file
 # does not use an actual or virtual com port, just writes/reads file.

@@ -1,7 +1,17 @@
 # version number for user_program and other tools
-PROGRAM_VERSION = 1.3
+PROGRAM_VERSION = "1.3.5"
 
 # ________________VERSION NOTES____________________
+
+# _____ V1.3.5: Support AHRS message and X3 binary, monitor window improvements _____
+
+#       add x3_tool.py which works for X3 units in binary or ASCII output
+#       now the applications are:
+#            x3_tool.py: for X3
+#            user_program.py: for EVK, GNSS, IMU+
+#            user_program_dataonly.py: for EVK, GNSS, IMU+ on a single serial cable with data port only
+#       AHRS message: show in monitor window and in csv export, only for firmware versions with that message
+#       monitor window: adjust layout and text to look better and be more readable
 
 # _____ V1.3: updates to support EVK/GNSS/IMU firmware v1.3 release _____
 

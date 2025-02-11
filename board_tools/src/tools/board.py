@@ -252,7 +252,9 @@ class IMUBoard:
     # check control port by pinging.
     def check_control_port(self):
         response = self.ping()
-        return response and response.valid and response.msgtype == b'PNG'
+        # must get proper ping response.
+        # Don't count APPNG,1 which comes from X3 data port. accept 2 (X3 config port) or 0 (old X3, other products).
+        return response and response.valid and response.msgtype == b'PNG' and response.code != 1
 
     def setup_data_port(self):
         # check the message format so it can parse IMU message
@@ -325,7 +327,6 @@ class IMUBoard:
             last_byte = connection.read(1)
 
         time.sleep(wait_time_seconds)
-
         last_byte = connection.read(1)
         while (last_byte is not None) and len(last_byte) > 0:
             last_byte = connection.read(1)
@@ -369,6 +370,7 @@ class IMUBoard:
     # connect again on serial after disconnecting. TOD0 - make a version for ethernet too?
     def reconnect_serial(self):
         #self.connect_to_ports(data_port=self.data_port_name, control_port=self.control_port_name)
+        # todo - clear config and data ports here? or inside init?
         self.__init__(self.data_port_name, self.control_port_name, baud=self.control_baud, data_baud=self.data_baud,
                       data_scheme=self.data_scheme, control_scheme=self.control_scheme)
 
@@ -745,13 +747,19 @@ class IMUBoard:
     def send_control_no_wait(self, message):
         self.control_scheme.write_one_message(message, self.control_connection)
 
+    def form_custom_message(self, message_text):
+        message_text = message_text.lstrip(READABLE_START)  # remove any starting #
+        checksum = int_to_ascii(self.control_scheme.compute_checksum(message_text))
+        full_msg = READABLE_START + message_text + READABLE_CHECKSUM_SEPARATOR + checksum + READABLE_END
+        return full_msg
+
     # read control message - for example response after we send a control message
     def read_one_control_message(self):
         # return self.control_scheme.read_one_message(self.control_connection) #old version
 
         for i in range(100):  # give up after too many tries - TODO what should limit be?
             resp = self.control_scheme.read_one_message(self.control_connection)
-            if not resp: # timeout , return None
+            if not resp:  # timeout , return None
                 return None
             # skip any output types, for firmware versions that output on both ports
             if hasattr(resp, "msgtype") and resp.msgtype in OUTPUT_MESSAGE_TYPES:
@@ -843,6 +851,13 @@ class IMUBoard:
 
     def enter_bootloading(self):
         self.send_reset(2)
+
+    # makes lookup tables from flash apply to ram without restarting the unit.
+    # unlike rst 0 and 2, this doesn't restart the unit, so it gets a response.
+    # TODO - this is added in X3 0.0.27 firmware. Move into X3_Board class, or will other products have it too?
+    def apply_lookup_tables(self):
+        m = Message({'msgtype': b'RST', 'code': 3})
+        return self.send_control_message(m)
 
     #send odometer message: over the udp odometer connection if exists, else config connection
     #config connection can take odometer messages but it could interfere with other config messaging
@@ -1081,6 +1096,8 @@ class IMUBoard:
 
     def retry_set_veh_flash(self, configurations):
         return self.retry_set_keywords(self.set_veh_flash, b'VEH', configurations)
+
+    #PUBLIC-TODO : check if we need unlock to check sensor ranges. otherwise remove.
 
     #lock/unlock flash: use getter method since it responds with "Locked" or "Unlocked". Returns True if success.
     def retry_lock_flash(self):
@@ -1456,6 +1473,29 @@ def truncate_decimal(num_or_str, places, unit=None):
         # if can't convert, just return the original thing (could be None, non-numerical string, etc)
         # don't add the unit since it's non-numerical
         return num_or_str
+
+
+# use recursive dict to show differences arranged the same way as the tested dictionaries.
+# expect everything in expect_dict to be in actual_dict, but not the other way around.
+# returns {} if everything is as expected (no differences)
+# could also try: deepdiff.DeepDiff(expect_dict, actual_dict) and check for only "dictionary_item_added"
+def config_dict_differences(expect_dict, actual_dict):
+    diffs = {}
+    for k, expect_val in expect_dict.items():
+        if k not in actual_dict:
+            diffs[k] = {"expected": expect_val, "actual": "missing"}
+            continue
+        actual_val = actual_dict[k]
+
+        # check recursively in sub-dictionaries.
+        if (type(expect_val) is dict) and (type(actual_val) is dict):
+            recursive_diffs = config_dict_differences(expect_val, actual_val)
+            if recursive_diffs != {}:
+                diffs[k] = recursive_diffs
+        else:
+            if expect_val != actual_val:
+                diffs[k] = {"expected": expect_val, "actual": actual_val}
+    return diffs
 
 
 # split port name into prefix and numbers

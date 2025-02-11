@@ -42,20 +42,22 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.file_picking import pick_one_file, pick_multiple_files
     from board_tools.log_config import log_board_config
 
-LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
-DEFAULT_MAP_IMG_PATH = os.path.join(MAP_DIR, DEFAULT_MAP_IMAGE)
-ARROW_FILE_PATH = os.path.join(MAP_DIR, ARROW_FILE_NAME)
+    LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+    ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
+    OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
+    DEFAULT_MAP_IMG_PATH = os.path.join(MAP_DIR, DEFAULT_MAP_IMAGE)
+    ARROW_FILE_PATH = os.path.join(MAP_DIR, ARROW_FILE_NAME)
 
 #interface for A1 configuration and logging
 class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
     def __init__(self, exitflag, con_on, con_start, con_stop, con_succeed,
-                 con_type, com_port, data_port_baud, config_port_baud, udp_ip, udp_port, gps_received,
+                 con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                  log_on, log_start, log_stop, log_name,
                  ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                  ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                 last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+                 last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg,
                  last_imu_time,
                  shared_serial_number
         ):
@@ -75,13 +77,15 @@ class UserProgram:
         self.log_on, self.log_start, self.log_stop, self.log_name = log_on, log_start, log_stop, log_name
         self.ntrip_on, self.ntrip_start, self.ntrip_stop, self.ntrip_succeed = ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed
         self.ntrip_ip, self.ntrip_port, self.ntrip_gga, self.ntrip_req = ntrip_ip, ntrip_port, ntrip_gga, ntrip_req
-        self.last_ins_msg, self.last_gps_msg, self.last_gp2_msg, self.last_imu_msg, self.last_hdg_msg = last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg
+        self.last_ins_msg, self.last_gps_msg, self.last_gp2_msg, self.last_imu_msg, self.last_hdg_msg, self.last_ahrs_msg\
+            = last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg
         self.last_imu_time = last_imu_time
 
         #any features which might or not be there - do based on firmware version?
         self.available_configs = []
         self.available_configs_ramonly = []
         self.show_gps_info = True
+        self.show_ahrs_tab = False
 
         #self.map_cache = {} #cache for map tiles. or could use lru.LRU[max_items] to avoid overfilling
         #self.map_cache = LRU(MAX_CACHE_TILES) #TODO - calculate how many tiles we can store in memory
@@ -143,6 +147,8 @@ class UserProgram:
                     self.reset()
                 elif action == "Send Inputs":
                     self.initialize_and_update_menu()
+                elif action == "Send Custom Message":
+                    self.send_custom_message_menu()
                 else:
                     raise Exception("invalid action: " + str(action))
             except (socket.error, socket.herror, socket.gaierror, socket.timeout, serial.SerialException, serial.SerialTimeoutException) as e:
@@ -192,7 +198,7 @@ class UserProgram:
         pass
 
     def show_info(self):
-        print(f"\nAnello Python Program, version {PROGRAM_VERSION}, " + date_time())
+        print(f"\nANELLO Python Program, version {PROGRAM_VERSION}, " + date_time())
         print("\nSystem Status:")
         self.show_device()
         self.show_connection()
@@ -202,7 +208,7 @@ class UserProgram:
     def show_device(self):
         if self.con_on.value and self.connection_info:
             print(
-                  f"    Product type: {self.product_id}"
+                  f"    Product type: {self.product_id.upper()}"
                   f"\n    Serial: {self.serialnum}"
                   f"\n    Firmware version: {self.version}")
 
@@ -286,6 +292,13 @@ class UserProgram:
                     #TODO - turn on another flag if X3 -> indicate to show FOG x, FOG y, magnetometer in monitor?
                 else:
                     self.show_gps_info = True  # default is to show everything
+
+                # check for ahrs config
+                get_ahrs_resp = self.retry_command(method=self.board.get_cfg, args=[["ahrs"]], response_types=[b'CFG', b'ERR'])
+                if hasattr(get_ahrs_resp, "configurations") and "ahrs" in get_ahrs_resp.configurations:
+                    self.show_ahrs_tab = True
+                else:
+                    self.show_ahrs_tab = False
                 return
             else:
                 self.release()
@@ -302,6 +315,8 @@ class UserProgram:
             if not board:
                 return
         elif selected == "Manual":
+            print("\nFor ANELLO GNSS-INS, IMU or IMU+: use port number of RS232-1 cable as 'data' and RS232-2 cable as 'configuration'")
+            print("\nFor ANELLO EVK: there should be four consecutive ports. Use the lowest number as 'data' and the highest as 'configuration'")
             self.release()
             board = IMUBoard()
             manual_result = board.connect_manually(set_data_port=True)
@@ -340,7 +355,7 @@ class UserProgram:
         auto_name = ""
         if settings: # only show saved option if it loads
             lip, rport1, rport2 = settings
-            auto_name = "Saved: A-1 ip = "+lip+", computer data port = "+str(rport1)+", computer config port = "+str(rport2)
+            auto_name = "Saved: ANELLO product ip = "+lip+", computer data port = "+str(rport1)+", computer config port = "+str(rport2)
             options = [auto_name]+options
 
         selected = options[cutie.select(options)]
@@ -349,7 +364,7 @@ class UserProgram:
             A1_ip, data_port, config_port = lip, rport1, rport2
         elif selected == "Manual":
             print("enter udp settings: if unsure, connect by com and check configurations")
-            A1_ip = input("A1 ip address: ")
+            A1_ip = input("ANELLO product ip address: ")
             data_port = cutie.get_number('data port: ', min_value=1, max_value=65535, allow_float=False)
             config_port = cutie.get_number('configuration port: ', min_value=1, max_value=65535, allow_float=False)
         else:  # cancel
@@ -470,13 +485,16 @@ class UserProgram:
 
             # don't allow message format = binary if any sensor ranges are 0, or version below 1.2
             if code == "mfm":
-                self.board.retry_unlock_flash()
-                ranges = self.board.retry_get_sensor(["rr1", "rr2", "rr3", "ra1", "ra2", "ra3"])
-                if ((ranges is None) or (b'0' in ranges)) and "0" in value_options:
-                    value_options.remove("0")
+                if "X3" in self.product_id.upper():
+                    value_options = message_formats_X3
+                else:
+                    self.board.retry_unlock_flash()
+                    ranges = self.board.retry_get_sensor(["rr1", "rr2", "rr3", "ra1", "ra2", "ra3"])
+                    if ((ranges is None) or (b'0' in ranges)) and "0" in value_options:
+                        value_options.remove("0")
 
-                if (not version_greater_or_equal(self.version, "1.2.0")) and "0" in value_options:
-                    value_options.remove("0")
+                    if (not version_greater_or_equal(self.version, "1.2.0")) and "0" in value_options:
+                        value_options.remove("0")
 
             value_option_names = [CFG_VALUE_NAMES.get((code, opt), opt) for opt in value_options]  # cfg and vale code -> value name
             value = value_options[cutie.select(value_option_names)]
@@ -702,6 +720,11 @@ class UserProgram:
         else:
             show_and_pause(f"\nunexpected response type {msg_type}")
 
+    # logging mode:
+    # prompt for file name with default suggestion
+    # stay in logging mode with indicator of # messages logged updated once/sec
+    # also count NTRIP messages if connected
+    # stop when esc or q is entered
     def log(self):
         clear_screen()
         self.show_logging()
@@ -819,7 +842,7 @@ class UserProgram:
             self.ntrip_gga.value = send_gga # seems to convert True/False to 1/0
 
             # _______NTRIP Connection Configs_______
-            userAgent = b'NTRIP Anello Client'
+            userAgent = b'NTRIP ANELLO Client'
             ntrip_version = 1
             ntrip_auth = "Basic" #TODO - add more options for these
 
@@ -870,9 +893,6 @@ class UserProgram:
 
         sg.theme(SGTHEME)
 
-        label_font = (FONT_NAME, LABEL_FONT_SIZE)
-        value_font = (FONT_NAME, VALUE_FONT_SIZE)
-
         #state for map updating
         current_zoom = MAP_ZOOM_DEFAULT
 
@@ -892,312 +912,329 @@ class UserProgram:
         if resp is not None and hasattr(resp, "configurations"):
             gps_is_on = resp.configurations["gps1"] == b'on'
             gps_working = True
-            gps_button = sg.Button(GPS_TEXT+TOGGLE_TEXT[gps_is_on], key="gps_button", enable_events=True,
-                                   font=value_font, button_color=TOGGLE_COLORS[gps_is_on])
+            starting_img = ON_BUTTON_PATH if gps_is_on else OFF_BUTTON_PATH
+            gps_button = sg.Button(image_filename=starting_img, key="gps_button", enable_events=True,
+                                   button_color=sg.theme_background_color(), border_width=0)
         else:
-            gps_button = sg.Button(GPS_TEXT + "disabled", key="gps_button", enable_events=False,
-                                   font=value_font, button_color=BUTTON_DISABLE_COLOR)
-        log_button = sg.Button(LOG_TEXT+TOGGLE_TEXT[self.log_on.value], key="log_button",  enable_events=True,
-                               font=value_font, button_color=TOGGLE_COLORS[self.log_on.value])
+            gps_button = sg.Button(image_filename=OFF_BUTTON_PATH, key="gps_button", enable_events=False,
+                                   button_color=sg.theme_background_color(), border_width=0)
 
-        time_since_gps_label = sg.Text("Last GPS (s): ", size=MONITOR_TIMELABEL_SIZE, font=label_font)
-        time_since_gps = sg.Text(MONITOR_DEFAULT_VALUE, key="since_gps", size=MONITOR_TIME_SIZE, font=label_font)
-        time_since_ins_label = sg.Text("Last INS (s): ", size=MONITOR_TIMELABEL_SIZE, font=label_font)
-        time_since_ins = sg.Text(MONITOR_DEFAULT_VALUE, key="since_ins", size=MONITOR_TIME_SIZE, font=label_font)
+        starting_img = ON_BUTTON_PATH if self.log_on.value else OFF_BUTTON_PATH
+        log_button = sg.Button(image_filename=starting_img, key="log_button", enable_events=True,
+                               button_color=sg.theme_background_color(), border_width=0)
+
         anello_logo = sg.Image(LOGO_PATH, size=(300, 80))
+        gps_label = sg.Text(GPS_TEXT, font=LABEL_FONT)
+        log_label = sg.Text(LOG_TEXT, font=LABEL_FONT)
+
+        buttons_row = [sg.Push(), log_label, log_button, sg.Push(),  gps_label, gps_button,
+                       sg.Push(), sg.Push(), sg.Push(), sg.Push(), anello_logo]
+#
 
         #gps message fields in the ins tab. keep these for now. they have 2 in name/key, vs ones in gps tab don't have 2
-        gps_carrsoln_label2 = sg.Text("Carrier Soln:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_carrsoln2 = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_carrsoln2", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        gps_fix_label2 = sg.Text("GPS Fix:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_fix2 = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_fix2", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        num_sats_label2 = sg.Text("Num Sats:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        num_sats_value2 = sg.Text(MONITOR_DEFAULT_VALUE, key="num_sats2", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        gps_carrsoln_label2 = sg.Text(GPS_CARRSOLN_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_carrsoln2 = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_carrsoln2", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gps_fix_label2 = sg.Text(GPS_FIX_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_fix2 = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_fix2", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        num_sats_label2 = sg.Text(GPS_NUMSV_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        num_sats_value2 = sg.Text(MONITOR_DEFAULT_VALUE, key="num_sats2", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
         # carrier solution vs fix type - need both? put both for now.
 
 
         #ins data: lat, lon, vx, vy, attitude x,y,z
-        lat = sg.Text(MONITOR_DEFAULT_VALUE, key="lat", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        lon = sg.Text(MONITOR_DEFAULT_VALUE, key="lon", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        speed = sg.Text(MONITOR_DEFAULT_VALUE, key="speed", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        att0 = sg.Text(MONITOR_DEFAULT_VALUE, key="att0", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        att1 = sg.Text(MONITOR_DEFAULT_VALUE, key="att1", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        att2 = sg.Text(MONITOR_DEFAULT_VALUE, key="att2", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        soln = sg.Text(MONITOR_DEFAULT_VALUE, key="soln", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        zupt = sg.Text(MONITOR_DEFAULT_VALUE, key="zupt", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        alt_value = sg.Text(MONITOR_DEFAULT_VALUE, key="altitude", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        lat = sg.Text(MONITOR_DEFAULT_VALUE, key="lat", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        lon = sg.Text(MONITOR_DEFAULT_VALUE, key="lon", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        speed = sg.Text(MONITOR_DEFAULT_VALUE, key="speed", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        att0 = sg.Text(MONITOR_DEFAULT_VALUE, key="att0", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        att1 = sg.Text(MONITOR_DEFAULT_VALUE, key="att1", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        att2 = sg.Text(MONITOR_DEFAULT_VALUE, key="att2", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        soln = sg.Text(MONITOR_DEFAULT_VALUE, key="soln", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        zupt = sg.Text(MONITOR_DEFAULT_VALUE, key="zupt", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        alt_value = sg.Text(MONITOR_DEFAULT_VALUE, key="altitude", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        lat_label = sg.Text("Lat. (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        lon_label = sg.Text("Lon. (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        speed_label = sg.Text("Speed (m/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        att0_label = sg.Text("Roll (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        att1_label = sg.Text("Pitch (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        att2_label = sg.Text("Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        soln_label = sg.Text("Solution:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        zupt_label = sg.Text("State:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        alt_label = sg.Text("Altitude (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        lat_label = sg.Text(INS_LAT_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        lon_label = sg.Text(INS_LON_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        speed_label = sg.Text(INS_SPEED_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        att0_label = sg.Text(INS_ROLL_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        att1_label = sg.Text(INS_PITCH_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        att2_label = sg.Text(INS_HEADING_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        soln_label = sg.Text(INS_SOLN_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        zupt_label = sg.Text(INS_ZUPT_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        alt_label = sg.Text(INS_ALT_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        ins_imu_time_label = sg.Text("IMU time ms:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        ins_gps_time_label = sg.Text("GPS time ns:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        ins_imu_time_label = sg.Text(IMU_TIME_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ins_gps_time_label = sg.Text(GPS_TIME_TEXT, size=INS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        ins_imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ins_imu_time", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        ins_gps_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ins_gps_time", size=(30,1), font=value_font, justification="center")
-        #ins_time_row_1 = [ins_imu_time_label, ins_imu_time_value]
-        #ins_time_row_2 = [ins_gps_time_label, ins_gps_time_value]
-        ins_time_row = [ins_imu_time_label, ins_imu_time_value, ins_gps_time_label, ins_gps_time_value]
+        ins_imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ins_imu_time", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ins_gps_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ins_gps_time", size=INS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        buttons_row = [gps_button, log_button, time_since_gps_label, time_since_gps, anello_logo]
+        # ins tab, two columns version
+        ins_col1 = sg.Column(alternating_color_table(
+            [[ins_imu_time_label, ins_imu_time_value],
+            [lat_label, lat], [alt_label, alt_value], [att0_label, att0],
+            [speed_label, speed], [soln_label, soln], [gps_carrsoln_label2, gps_carrsoln2]]))
 
-        # latlon_row = [lat_label, lat, lon_label, lon]
-        # altitude_row = [alt_label, alt_value]
-        # velocity_row = [speed_label, speed, att2_label, att2]
-        # att_row = [att0_label, att0, att1_label, att1]
-        # gps_fix_row = [gps_carrsoln_label, gps_carrsoln, gps_fix_label, gps_fix]
-        # flags_row = [soln_label, soln, zupt_label, zupt]
-        # numsv_row = [num_sats_label, num_sats_value] #todo rearrange - num sats with some o the fix stuff, speed with zupt etc?
-        # #tab_1_layout = [buttons_row, [sg.HSeparator()], latlon_row, velocity_row, att_row, flags_row, gps_fix_row]
-        # tab_1_layout = [latlon_row, altitude_row, velocity_row, att_row, flags_row, gps_fix_row, numsv_row] #move buttons row above tab group
+        ins_col2 = sg.Column(alternating_color_table(
+            [[ins_gps_time_label, ins_gps_time_value],
+             [lon_label, lon], [att2_label, att2], [att1_label, att1],
+             [zupt_label, zupt], [num_sats_label2, num_sats_value2], [gps_fix_label2, gps_fix2]]))
 
-        latlon_row = [lat_label, lat, lon_label, lon]
-        altitude_row = [alt_label, alt_value, att2_label, att2]
-        att_row = [att0_label, att0, att1_label, att1]
-        velocity_row = [speed_label, speed, zupt_label, zupt]
-        flags_row = [soln_label, soln, num_sats_label2, num_sats_value2]
-        gps_fix_row = [gps_carrsoln_label2, gps_carrsoln2, gps_fix_label2, gps_fix2]
-        #tab_1_layout = [latlon_row, altitude_row, att_row, velocity_row, flags_row, gps_fix_row, ins_time_row_1, ins_time_row_2]
-        tab_1_layout = [ins_time_row, latlon_row, altitude_row, att_row, velocity_row, flags_row, gps_fix_row]
-        ins_tab = sg.Tab(MONITOR_INS_TAB_TITLE, tab_1_layout, key="numbers-tab")#, title_color='Red', background_color='Green', element_justification='center')
+        ins_tab_layout = [[sg.vtop(ins_col1), sg.Push(), sg.vtop(ins_col2)]]
+        ins_tab = sg.Tab(MONITOR_INS_TAB_TITLE, ins_tab_layout, key="numbers-tab")
 
         # ________________TAB 2: IMU Data_______________________
 
-        ax_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ax_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        ay_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ay_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        az_value = sg.Text(MONITOR_DEFAULT_VALUE, key="az_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wx_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wx_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wy_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wy_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wz_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wz_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        fog_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        temp_value = sg.Text(MONITOR_DEFAULT_VALUE, key="temp_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        odo_value = sg.Text(MONITOR_DEFAULT_VALUE, key="odo_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        ax_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ax_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ay_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ay_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        az_value = sg.Text(MONITOR_DEFAULT_VALUE, key="az_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wx_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wx_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wy_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wy_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wz_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wz_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        fog_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        temp_value = sg.Text(MONITOR_DEFAULT_VALUE, key="temp_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        odo_value = sg.Text(MONITOR_DEFAULT_VALUE, key="odo_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_cpu_time", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        imu_sync_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_sync_time", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_cpu_time", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        imu_sync_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_sync_time", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        ax_label = sg.Text("Accel x (g):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        ay_label = sg.Text("Accel y (g):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        az_label = sg.Text("Accel z (g):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wx_label = sg.Text("MEMS Rate x (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wy_label = sg.Text("MEMS Rate y (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wz_label = sg.Text("MEMS Rate z (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        fog_label = sg.Text("FOG Rate z (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        temp_label = sg.Text("Temperature (C):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        odo_label = sg.Text("Odometer Speed (m/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        ax_label = sg.Text(MEMS_AX_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ay_label = sg.Text(MEMS_AY_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        az_label = sg.Text(MEMS_AZ_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wx_label = sg.Text(MEMS_WX_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wy_label = sg.Text(MEMS_WY_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wz_label = sg.Text(MEMS_WZ_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        fog_label = sg.Text(FOG_WZ_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        temp_label = sg.Text(TEMP_C_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        odo_label = sg.Text(ODO_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        imu_time_label = sg.Text("IMU time ms:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        imu_sync_label = sg.Text("Sync time ms:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        imu_time_label = sg.Text(IMU_TIME_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        imu_sync_label = sg.Text(SYNC_TIME_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        # accel_row = [ax_label, ax_value, ay_label, ay_value, az_label, az_value]
-        # mems_rate_row = [wx_label, wx_value, wy_label, wy_value, wz_label, wz_value]
-        mems_x_row = [ax_label, ax_value, wx_label, wx_value]
-        mems_y_row = [ay_label, ay_value, wy_label, wy_value]
-        mems_z_row = [az_label, az_value, wz_label, wz_value]
-        fog_row = [temp_label, temp_value, fog_label, fog_value]
-        odo_row = [odo_label, odo_value]
-        imu_time_row = [imu_time_label, imu_time_value, imu_sync_label, imu_sync_value]
-        #imu_tab_layout = [accel_row, mems_rate_row, fog_row]
-        imu_tab_layout = [imu_time_row, mems_x_row, mems_y_row, mems_z_row, fog_row, odo_row]
+        imu_col1_frame = [[imu_time_label, imu_time_value],
+             [ax_label, ax_value],
+             [ay_label, ay_value],
+             [az_label, az_value],
+             [temp_label, temp_value]]
+
+        # only show odometer on units with algo
+        if self.show_gps_info:
+            imu_col1_frame.append([odo_label, odo_value])
+
+        imu_col1 = sg.Column(alternating_color_table(imu_col1_frame))
+
+        imu_col2 = sg.Column(alternating_color_table(
+            [[imu_sync_label, imu_sync_value],
+             [wx_label, wx_value],
+             [wy_label, wy_value],
+             [wz_label, wz_value],
+             [fog_label, fog_value]]))
+
+        imu_tab_layout = [[sg.vtop(imu_col1), sg.Push(), sg.vtop(imu_col2)]]
         imu_tab = sg.Tab(MONITOR_IMU_TAB_TITLE, imu_tab_layout, key="imu-tab")
 
         #________________TAB 3: GPS Data __________________
 
-        #gps message fields - also some are in ins tab: gps_carrsoln, gps_fix, num_sats_value
-        gps_lat_label = sg.Text("GPS Lat (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_lon_label = sg.Text("GPS Lon (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_elipsoid_label = sg.Text("Alt Ellipsoid (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_msl_label = sg.Text("Alt MSL (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_speed_label = sg.Text("GPS Speed (m/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_heading_label = sg.Text("GPS Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_hacc_label = sg.Text("Horizontal Acccuracy (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_vacc_label = sg.Text("Vertical Accuracy (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_pdop_label = sg.Text("PDOP:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_fix_label = sg.Text("GPS Fix:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_numsv_label = sg.Text("Num Sats:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_carrsoln_label = sg.Text("GPS Carrier Solution:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_spd_acc_label = sg.Text("GPS Speed Accuracy:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gps_hdg_acc_label = sg.Text("GPS Heading Accuracy:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        #[gps_lat_label,gps_lon_label,gps_elipsoid_label,gps_msl_label,gps_speed_label,gps_heading_label,gps_hacc_label,gps_vacc_label,gps_pdop_label,gps_fix_label,gps_numsv_label,gps_carrsoln_label,gps_spd_acc_label,gps_hdg_acc_label]
+        # gps message fields - also some are in ins tab: gps_carrsoln, gps_fix, num_sats_value
+        gps_lat_label = sg.Text(GPS_LAT_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_lon_label = sg.Text(GPS_LON_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_ellipsoid_label = sg.Text(GPS_ALT_ELLIPSOID_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_msl_label = sg.Text(GPS_ALT_MSL_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_speed_label = sg.Text(GPS_SPEED_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_heading_label = sg.Text(GPS_HEADING_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_hacc_label = sg.Text(GPS_HACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_vacc_label = sg.Text(GPS_VACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_pdop_label = sg.Text(GPS_PDOP_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_fix_label = sg.Text(GPS_FIX_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_numsv_label = sg.Text(GPS_NUMSV_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_carrsoln_label = sg.Text(GPS_CARRSOLN_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_spd_acc_label = sg.Text(GPS_SPEEDACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gps_hdg_acc_label = sg.Text(GPS_HDG_ACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        gps_lat_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_lat", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_lon_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_lon", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_elipsoid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_alt_ell", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_msl_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_alt_msl", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_speed_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_spd", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hdg", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_hacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hacc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_vacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_vacc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_pdop_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_pdop", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_fix_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_fix", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_numsv_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_numsv", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_carrsoln", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_spd_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_spd_acc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        gps_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hdg_acc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        #gps_lat_value,gps_lon_value,gps_elipsoid_value,gps_msl_value,gps_speed_value,gps_heading_value,gps_hacc_value,gps_vacc_value,gps_pdop_value,gps_fix_value,gps_numsv_value,gps_carrsoln_value,gps_spd_acc_value,gps_hdg_acc_value
+        gps_lat_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_lat", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_lon_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_lon", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_ellipsoid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_alt_ell", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_msl_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_alt_msl", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_speed_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_spd", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hdg", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_hacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hacc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_vacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_vacc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_pdop_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_pdop", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_fix_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_fix", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_numsv_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_numsv", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_carrsoln", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_spd_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_spd_acc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        gps_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gps_hdg_acc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
 
-        # #heading message fields
-        # hdg_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdg", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        # hdg_length_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_len", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        # hdg_flags_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        #
-        # hdg_heading_label = sg.Text("Dual Ant. Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        # hdg_length_label = sg.Text("Dual Ant. Length (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        # hdg_flags_label = sg.Text("Dual Ant. Flags:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        gps_col1 = sg.Column(alternating_color_table(
+            [[gps_lat_label, gps_lat_value],
+             [gps_ellipsoid_label, gps_ellipsoid_value],
+             [gps_speed_label, gps_speed_value],
+             [gps_spd_acc_label, gps_spd_acc_value],
+             [gps_hacc_label, gps_hacc_value],
+             [gps_pdop_label, gps_pdop_value],
+             [gps_numsv_label, gps_numsv_value]]))
 
-        gps_row1 = [gps_lat_label, gps_lat_value, gps_lon_label, gps_lon_value]
-        gps_row2 = [gps_elipsoid_label, gps_elipsoid_value, gps_msl_label, gps_msl_value]
-        gps_row3 = [gps_speed_label, gps_speed_value, gps_heading_label, gps_heading_value]
-        gps_row4 = [gps_spd_acc_label, gps_spd_acc_value, gps_hdg_acc_label, gps_hdg_acc_value]
-        gps_row5 = [gps_hacc_label, gps_hacc_value, gps_vacc_label, gps_vacc_value]
-        gps_row6 = [gps_pdop_label, gps_pdop_value, gps_fix_label, gps_fix_value]
-        gps_row7 = [gps_numsv_label, gps_numsv_value, gps_carrsoln_label, gps_carrsoln_value]
-        # hdg_row1 = [hdg_heading_label, hdg_heading_value, hdg_length_label, hdg_length_value]
-        # hdg_row2 = [hdg_flags_label, hdg_flags_value]
-        gps_tab_layout = [gps_row1, gps_row2, gps_row3, gps_row4, gps_row5, gps_row6, gps_row7] #, hdg_row1, hdg_row2]
+        gps_col2 = sg.Column(alternating_color_table(
+            [[gps_lon_label, gps_lon_value],
+             [gps_msl_label, gps_msl_value],
+             [gps_heading_label, gps_heading_value],
+             [gps_hdg_acc_label, gps_hdg_acc_value],
+             [gps_vacc_label, gps_vacc_value],
+             [gps_fix_label, gps_fix_value],
+             [gps_carrsoln_label, gps_carrsoln_value]]))
+
+        gps_tab_layout = [[sg.vtop(gps_col1), sg.Push(), sg.vtop(gps_col2)]]
         gps_tab = sg.Tab(MONITOR_GPS_TAB_TITLE, gps_tab_layout, key="gps-tab")
 
         #________________TAB 4: GP2 data - looks same as GPS?_______________________
 
         # gp2 message fields - also some are in ins tab: gp2_carrsoln, gp2_fix, num_sats_value
-        gp2_lat_label = sg.Text("GP2 Lat (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_lon_label = sg.Text("GP2 Lon (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_elipsoid_label = sg.Text("Alt Ellipsoid (m):", size=MONITOR_LABEL_SIZE, font=label_font,
-                                     justification=MONITOR_ALIGN)
-        gp2_msl_label = sg.Text("Alt MSL (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_speed_label = sg.Text("GP2 Speed (m/s):", size=MONITOR_LABEL_SIZE, font=label_font,
-                                  justification=MONITOR_ALIGN)
-        gp2_heading_label = sg.Text("GP2 Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font,
-                                    justification=MONITOR_ALIGN)
-        gp2_hacc_label = sg.Text("Horizontal Acccuracy (m):", size=MONITOR_LABEL_SIZE, font=label_font,
-                                 justification=MONITOR_ALIGN)
-        gp2_vacc_label = sg.Text("Vertical Accuracy (m):", size=MONITOR_LABEL_SIZE, font=label_font,
-                                 justification=MONITOR_ALIGN)
-        gp2_pdop_label = sg.Text("PDOP:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_fix_label = sg.Text("GP2 Fix:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_numsv_label = sg.Text("Num Sats:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        gp2_carrsoln_label = sg.Text("GP2 Carrier Solution:", size=MONITOR_LABEL_SIZE, font=label_font,
-                                     justification=MONITOR_ALIGN)
-        gp2_spd_acc_label = sg.Text("GP2 Speed Accuracy:", size=MONITOR_LABEL_SIZE, font=label_font,
-                                    justification=MONITOR_ALIGN)
-        gp2_hdg_acc_label = sg.Text("GP2 Heading Accuracy:", size=MONITOR_LABEL_SIZE, font=label_font,
-                                    justification=MONITOR_ALIGN)
-        # [gp2_lat_label,gp2_lon_label,gp2_elipsoid_label,gp2_msl_label,gp2_speed_label,gp2_heading_label,gp2_hacc_label,gp2_vacc_label,gp2_pdop_label,gp2_fix_label,gp2_numsv_label,gp2_carrsoln_label,gp2_spd_acc_label,gp2_hdg_acc_label]
+        gp2_lat_label = sg.Text(GPS_LAT_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_lon_label = sg.Text(GPS_LON_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_ellipsoid_label = sg.Text(GPS_ALT_ELLIPSOID_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT,justification=MONITOR_ALIGN)
+        gp2_msl_label = sg.Text(GPS_ALT_MSL_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_speed_label = sg.Text(GPS_SPEED_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_heading_label = sg.Text(GPS_HEADING_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_hacc_label = sg.Text(GPS_HACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_vacc_label = sg.Text(GPS_VACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_pdop_label = sg.Text(GPS_PDOP_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_fix_label = sg.Text(GPS_FIX_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_numsv_label = sg.Text(GPS_NUMSV_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_carrsoln_label = sg.Text(GPS_CARRSOLN_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_spd_acc_label = sg.Text(GPS_SPEEDACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        gp2_hdg_acc_label = sg.Text(GPS_HDG_ACC_TEXT, size=GPS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        gp2_lat_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_lat", size=MONITOR_VALUE_SIZE, font=value_font,
-                                justification=MONITOR_ALIGN)
-        gp2_lon_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_lon", size=MONITOR_VALUE_SIZE, font=value_font,
-                                justification=MONITOR_ALIGN)
-        gp2_elipsoid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_alt_ell", size=MONITOR_VALUE_SIZE, font=value_font,
-                                     justification=MONITOR_ALIGN)
-        gp2_msl_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_alt_msl", size=MONITOR_VALUE_SIZE, font=value_font,
-                                justification=MONITOR_ALIGN)
-        gp2_speed_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_spd", size=MONITOR_VALUE_SIZE, font=value_font,
-                                  justification=MONITOR_ALIGN)
-        gp2_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hdg", size=MONITOR_VALUE_SIZE, font=value_font,
-                                    justification=MONITOR_ALIGN)
-        gp2_hacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hacc", size=MONITOR_VALUE_SIZE, font=value_font,
-                                 justification=MONITOR_ALIGN)
-        gp2_vacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_vacc", size=MONITOR_VALUE_SIZE, font=value_font,
-                                 justification=MONITOR_ALIGN)
-        gp2_pdop_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_pdop", size=MONITOR_VALUE_SIZE, font=value_font,
-                                 justification=MONITOR_ALIGN)
-        gp2_fix_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_fix", size=MONITOR_VALUE_SIZE, font=value_font,
-                                justification=MONITOR_ALIGN)
-        gp2_numsv_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_numsv", size=MONITOR_VALUE_SIZE, font=value_font,
-                                  justification=MONITOR_ALIGN)
-        gp2_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_carrsoln", size=MONITOR_VALUE_SIZE,
-                                     font=value_font, justification=MONITOR_ALIGN)
-        gp2_spd_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_spd_acc", size=MONITOR_VALUE_SIZE, font=value_font,
-                                    justification=MONITOR_ALIGN)
-        gp2_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hdg_acc", size=MONITOR_VALUE_SIZE, font=value_font,
-                                    justification=MONITOR_ALIGN)
-        # gp2_lat_value,gp2_lon_value,gp2_elipsoid_value,gp2_msl_value,gp2_speed_value,gp2_heading_value,gp2_hacc_value,gp2_vacc_value,gp2_pdop_value,gp2_fix_value,gp2_numsv_value,gp2_carrsoln_value,gp2_spd_acc_value,gp2_hdg_acc_value
-
-        # #heading message fields
-        # hdg_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdg", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        # hdg_length_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_len", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        # hdg_flags_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        #
-        # hdg_heading_label = sg.Text("Dual Ant. Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        # hdg_length_label = sg.Text("Dual Ant. Length (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        # hdg_flags_label = sg.Text("Dual Ant. Flags:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-
-        gp2_row1 = [gp2_lat_label, gp2_lat_value, gp2_lon_label, gp2_lon_value]
-        gp2_row2 = [gp2_elipsoid_label, gp2_elipsoid_value, gp2_msl_label, gp2_msl_value]
-        gp2_row3 = [gp2_speed_label, gp2_speed_value, gp2_heading_label, gp2_heading_value]
-        gp2_row4 = [gp2_spd_acc_label, gp2_spd_acc_value, gp2_hdg_acc_label, gp2_hdg_acc_value]
-        gp2_row5 = [gp2_hacc_label, gp2_hacc_value, gp2_vacc_label, gp2_vacc_value]
-        gp2_row6 = [gp2_pdop_label, gp2_pdop_value, gp2_fix_label, gp2_fix_value]
-        gp2_row7 = [gp2_numsv_label, gp2_numsv_value, gp2_carrsoln_label, gp2_carrsoln_value]
-        # hdg_row1 = [hdg_heading_label, hdg_heading_value, hdg_length_label, hdg_length_value]
-        # hdg_row2 = [hdg_flags_label, hdg_flags_value]
-        gp2_tab_layout = [gp2_row1, gp2_row2, gp2_row3, gp2_row4, gp2_row5, gp2_row6, gp2_row7]  # , hdg_row1, hdg_row2]
-        gp2_tab = sg.Tab(MONITOR_GP2_TAB_TITLE, gp2_tab_layout, key="gp2-tab")
+        gp2_lat_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_lat", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_lon_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_lon", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_ellipsoid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_alt_ell", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_msl_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_alt_msl", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_speed_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_spd", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hdg", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_hacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hacc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_vacc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_vacc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_pdop_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_pdop", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_fix_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_fix", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_numsv_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_numsv", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_carrsoln", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_spd_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_spd_acc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        gp2_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="gp2_hdg_acc", size=GPS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
         
+        gp2_col1 = sg.Column(alternating_color_table(
+            [[gp2_lat_label, gp2_lat_value],
+             [gp2_ellipsoid_label, gp2_ellipsoid_value],
+             [gp2_speed_label, gp2_speed_value],
+             [gp2_spd_acc_label, gp2_spd_acc_value],
+             [gp2_hacc_label, gp2_hacc_value],
+             [gp2_pdop_label, gp2_pdop_value],
+             [gp2_numsv_label, gp2_numsv_value]]))
+
+        gp2_col2 = sg.Column(alternating_color_table(
+            [[gp2_lon_label, gp2_lon_value],
+             [gp2_msl_label, gp2_msl_value],
+             [gp2_heading_label, gp2_heading_value],
+             [gp2_hdg_acc_label, gp2_hdg_acc_value],
+             [gp2_vacc_label, gp2_vacc_value],
+             [gp2_fix_label, gp2_fix_value],
+             [gp2_carrsoln_label, gp2_carrsoln_value]]))
+
+        gp2_tab_layout = [[sg.vtop(gp2_col1), sg.Push(), sg.vtop(gp2_col2)]]
+        gp2_tab = sg.Tab(MONITOR_GP2_TAB_TITLE, gp2_tab_layout, key="gp2-tab")
 
         #________________TAB 5: Dual Antenna Heading_______________________
 
         #heading message fields
-        hdg_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdg", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_length_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_len", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_north_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_N", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_east_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_E", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        hdg_down_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_D", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        hdg_len_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_lenacc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        hdg_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdgacc", size=MONITOR_VALUE_SIZE, font=value_font,justification=MONITOR_ALIGN)
-        hdg_flags_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        hdg_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdg", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_length_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_len", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_north_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_N", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_east_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_E", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        hdg_down_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_D", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        hdg_len_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_lenacc", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        hdg_hdg_acc_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_hdgacc", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT,justification=MONITOR_ALIGN)
+        hdg_flags_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
         #put the individual flags here?
-        hdg_flags_fixok_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_fixok", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_diffsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_diffsoln", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_posvalid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_posvalid", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_ismoving_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_ismoving", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_refposmiss_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_refposmiss", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_refobsmiss_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_refobsmiss", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_hdgvalid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_hdgvalid", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_normalized_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_normalized", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        hdg_flags_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_carrsoln", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        hdg_flags_fixok_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_fixok", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_diffsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_diffsoln", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_posvalid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_posvalid", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_ismoving_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_ismoving", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_refposmiss_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_refposmiss", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_refobsmiss_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_refobsmiss", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_hdgvalid_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_hdgvalid", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_normalized_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_normalized", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_carrsoln_value = sg.Text(MONITOR_DEFAULT_VALUE, key="hdg_flags_carrsoln", size=HDG_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        hdg_heading_label = sg.Text("Dual Ant. Heading (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_length_label = sg.Text("Dual Ant. Length (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_north_label = sg.Text("Rel. Pos. North (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_east_label = sg.Text("Rel. Pos. East (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_down_label = sg.Text("Rel. Pos. Down (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_len_acc_label = sg.Text("Length Accuracy (m):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_hdg_acc_label = sg.Text("Heading Accuracy (deg):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_label = sg.Text("Dual Ant. Flags:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        hdg_heading_label = sg.Text(HDG_HEADING_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_length_label = sg.Text(HDG_LENGTH_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_north_label = sg.Text(HDG_NORTH_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_east_label = sg.Text(HDG_EAST_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_down_label = sg.Text(HDG_DOWN_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_len_acc_label = sg.Text(HDG_LEN_ACC_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_hdg_acc_label = sg.Text(HDG_HDG_ACC_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_label = sg.Text(HDG_FLAGS_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
         #flags
-        hdg_flags_fixok_label = sg.Text("Fix OK Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_diffsoln_label = sg.Text("Diff Soln Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_posvalid_label = sg.Text("Pos Valid Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_ismoving_label = sg.Text("Is Moving Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_refposmiss_label = sg.Text("Ref Pos Miss Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_refobsmiss_label = sg.Text("Ref Obs Miss Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_hdgvalid_label = sg.Text("Heading Valid Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_normalized_label = sg.Text("Normalized Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        hdg_flags_carrsoln_label = sg.Text("Carrier Solution Flag:", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        hdg_flags_fixok_label = sg.Text(HDG_FLAGS_FIXOK_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_diffsoln_label = sg.Text(HDG_FLAGS_DIFFSOLN_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_posvalid_label = sg.Text(HDG_FLAGS_POSVALID_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_ismoving_label = sg.Text(HDG_FLAGS_ISMOVING_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_refposmiss_label = sg.Text(HDG_FLAGS_REFPOSMISS_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_refobsmiss_label = sg.Text(HDG_FLAGS_REFOBSMISS_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_hdgvalid_label = sg.Text(HDG_FLAGS_HDGVALID_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_normalized_label = sg.Text(HDG_FLAGS_NORMALIZED_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        hdg_flags_carrsoln_label = sg.Text(HDG_FLAGS_CARRSOLN_TEXT, size=HDG_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        hdg_row1 = [hdg_heading_label, hdg_heading_value, hdg_length_label, hdg_length_value]
-        #hdg_flags_row = [hdg_flags_label, hdg_flags_value]
-        hdg_row2 = [hdg_north_label, hdg_north_value, hdg_east_label, hdg_east_value]
-        hdg_row3 = [hdg_down_label, hdg_down_value, hdg_flags_label, hdg_flags_value]
-        hdg_row4 = [hdg_hdg_acc_label, hdg_hdg_acc_value, hdg_len_acc_label, hdg_len_acc_value]
-        #flags
-        hdg_row5 = [hdg_flags_fixok_label, hdg_flags_fixok_value, hdg_flags_diffsoln_label, hdg_flags_diffsoln_value]
-        hdg_row6 = [hdg_flags_posvalid_label, hdg_flags_posvalid_value, hdg_flags_ismoving_label, hdg_flags_ismoving_value]
-        hdg_row7 = [hdg_flags_refposmiss_label, hdg_flags_refposmiss_value, hdg_flags_refobsmiss_label, hdg_flags_refobsmiss_value]
-        hdg_row8 = [hdg_flags_hdgvalid_label, hdg_flags_hdgvalid_value, hdg_flags_normalized_label, hdg_flags_normalized_value]
-        hdg_row9 = [hdg_flags_carrsoln_label, hdg_flags_carrsoln_value]
+        hdg_col1 = sg.Column(alternating_color_table(
+            [[hdg_heading_label, hdg_heading_value],
+             [hdg_hdg_acc_label, hdg_hdg_acc_value],
+             [hdg_north_label, hdg_north_value],
+             [hdg_down_label, hdg_down_value],
+             [hdg_flags_fixok_label, hdg_flags_fixok_value],
+             [hdg_flags_posvalid_label, hdg_flags_posvalid_value],
+             [hdg_flags_refposmiss_label, hdg_flags_refposmiss_value],
+             [hdg_flags_hdgvalid_label, hdg_flags_hdgvalid_value],
+             [hdg_flags_carrsoln_label, hdg_flags_carrsoln_value]]))
 
-        hdg_tab_layout = [hdg_row1, hdg_row4, hdg_row2, hdg_row3, hdg_row5, hdg_row6, hdg_row7, hdg_row8, hdg_row9]
+        hdg_col2 = sg.Column(alternating_color_table(
+            [[hdg_length_label, hdg_length_value],
+             [hdg_len_acc_label, hdg_len_acc_value],
+             [hdg_east_label, hdg_east_value],
+             [hdg_flags_label, hdg_flags_value],
+             [hdg_flags_diffsoln_label, hdg_flags_diffsoln_value],
+             [hdg_flags_ismoving_label, hdg_flags_ismoving_value],
+             [hdg_flags_refobsmiss_label, hdg_flags_refobsmiss_value],
+             [hdg_flags_normalized_label, hdg_flags_normalized_value]]))
+
+        hdg_tab_layout = [[sg.vtop(hdg_col1), sg.Push(), sg.vtop(hdg_col2)]]
         hdg_tab = sg.Tab(MONITOR_HDG_TAB_TITLE, hdg_tab_layout, key="hdg-tab")
+
+        # ---------------------- AHRS tab : only for some firmware versions on IMU+? ----------------------------------
+
+        ahrs_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_time", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ahrs_sync_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_sync", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ahrs_roll_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_roll", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ahrs_pitch_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_pitch", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ahrs_heading_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_heading", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ahrs_zupt_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ahrs_zupt", size=AHRS_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+
+        ahrs_time_label = sg.Text(AHRS_TIME_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ahrs_sync_label = sg.Text(AHRS_SYNC_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ahrs_roll_label = sg.Text(AHRS_ROLL_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ahrs_pitch_label = sg.Text(AHRS_PITCH_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ahrs_heading_label = sg.Text(AHRS_HEADING_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ahrs_zupt_label = sg.Text(AHRS_ZUPT_TEXT, size=AHRS_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+
+        ahrs_col1 = sg.Column(alternating_color_table(
+            [[ahrs_time_label, ahrs_time_value],
+             [ahrs_roll_label, ahrs_roll_value],
+             [ahrs_heading_label, ahrs_heading_value],
+        ]))
+
+        ahrs_col2 = sg.Column(alternating_color_table(
+            [[ahrs_sync_label, ahrs_sync_value],
+             [ahrs_pitch_label, ahrs_pitch_value],
+             [ahrs_zupt_label, ahrs_zupt_value],
+        ]))
+
+        ahrs_tab_layout = [[sg.vtop(ahrs_col1), sg.Push(), sg.vtop(ahrs_col2)]]
+        ahrs_tab = sg.Tab(MONITOR_AHRS_TAB_TITLE, ahrs_tab_layout, key="ahrs-tab")
 
         #________________TAB 6: Map display_______________________
 
@@ -1219,14 +1256,11 @@ class UserProgram:
         #try_set_expand(map_image)
 
         #put things on side of map: zoom in, zoom out, angle dials
-        zoom_label = sg.Text("zoom:", size=(6,1), font=label_font)
-        zoom_in_button = sg.Button(" + ", key="zoom_in_button",  enable_events=True, font=value_font)
-        zoom_out_button = sg.Button("  - ", key="zoom_out_button", enable_events=True, font=value_font)
+        zoom_in_button = sg.Button(" + ", key="zoom_in_button",  enable_events=True, font=LABEL_FONT)
+        zoom_out_button = sg.Button("  - ", key="zoom_out_button", enable_events=True, font=LABEL_FONT)
 
-        map_side_frame = sg.Frame("", [
-                                        [zoom_label], [zoom_out_button, zoom_in_button],
-                                        ], element_justification='left',
-                                        relief=sg.RELIEF_RAISED, border_width=5)
+        map_side_frame = sg.Frame("", [[zoom_in_button], [zoom_out_button]],
+                                  element_justification='left', relief=sg.RELIEF_SOLID, border_width=2)
         map_side_column = sg.Column([[map_side_frame]], vertical_alignment='top')
 
         layout2 = [[map_main_column, map_side_column]]
@@ -1234,13 +1268,14 @@ class UserProgram:
 
         #________________Window structure: contains both tabs_______________________
 
-        tab_group = sg.TabGroup([[ins_tab, imu_tab, gps_tab, gp2_tab, hdg_tab, map_tab]])#, tab_location='top',  # top, topleft, bottom, bottomright, left, right
+        tab_group = sg.TabGroup([[ins_tab, ahrs_tab, imu_tab, gps_tab, gp2_tab, hdg_tab, map_tab]])#, tab_location='top',  # top, topleft, bottom, bottomright, left, right
                                 #title_color='Red', tab_background_color='White',  # non-selected tabs
                                 #selected_title_color='Yellow', selected_background_color='Blue')  # selected tab
         try_set_expand(tab_group)
 
         #group elements by size for resizing  - can this be assembled from ins_fields, imu_fields etc?
-        label_font_elements = [lat_label, lon_label, speed_label, att0_label, att1_label, att2_label,
+        label_font_elements = [gps_label, log_label,
+                               lat_label, lon_label, speed_label, att0_label, att1_label, att2_label,
                                soln_label, zupt_label, gps_carrsoln_label2, gps_fix_label2, alt_label, num_sats_label2,
                                ax_label, ay_label, az_label, wx_label, wy_label, wz_label, fog_label, temp_label, odo_label,
 
@@ -1253,13 +1288,15 @@ class UserProgram:
                                hdg_flags_refposmiss_label, hdg_flags_refobsmiss_label, hdg_flags_hdgvalid_label,
                                hdg_flags_normalized_label, hdg_flags_carrsoln_label,
                                
-                               gps_lat_label, gps_lon_label, gps_elipsoid_label, gps_msl_label, gps_speed_label,
+                               gps_lat_label, gps_lon_label, gps_ellipsoid_label, gps_msl_label, gps_speed_label,
                                gps_heading_label, gps_hacc_label, gps_vacc_label, gps_pdop_label, gps_fix_label,
                                gps_numsv_label, gps_carrsoln_label, gps_spd_acc_label, gps_hdg_acc_label,
 
-                               gp2_lat_label, gp2_lon_label, gp2_elipsoid_label, gp2_msl_label, gp2_speed_label,
+                               gp2_lat_label, gp2_lon_label, gp2_ellipsoid_label, gp2_msl_label, gp2_speed_label,
                                gp2_heading_label, gp2_hacc_label, gp2_vacc_label, gp2_pdop_label, gp2_fix_label,
-                               gp2_numsv_label, gp2_carrsoln_label, gp2_spd_acc_label, gp2_hdg_acc_label]
+                               gp2_numsv_label, gp2_carrsoln_label, gp2_spd_acc_label, gp2_hdg_acc_label,
+
+                               ahrs_time_label, ahrs_sync_label, ahrs_roll_label, ahrs_pitch_label, ahrs_heading_label, ahrs_zupt_label]
 
         value_font_elements = [lat, lon, speed, att0, att1, att2, soln, zupt, gps_carrsoln2, gps_fix2, alt_value, num_sats_value2,
                                ax_value, ay_value, az_value, wx_value, wy_value, wz_value, fog_value, temp_value, odo_value,
@@ -1274,15 +1311,20 @@ class UserProgram:
                                hdg_flags_refposmiss_value, hdg_flags_refobsmiss_value, hdg_flags_hdgvalid_value,
                                hdg_flags_normalized_value, hdg_flags_carrsoln_value,
 
-                               gps_lat_value, gps_lon_value, gps_elipsoid_value, gps_msl_value, gps_speed_value,
+                               gps_lat_value, gps_lon_value, gps_ellipsoid_value, gps_msl_value, gps_speed_value,
                                gps_heading_value, gps_hacc_value, gps_vacc_value, gps_pdop_value, gps_fix_value,
                                gps_numsv_value, gps_carrsoln_value, gps_spd_acc_value, gps_hdg_acc_value,
 
-                               gp2_lat_value, gp2_lon_value, gp2_elipsoid_value, gp2_msl_value, gp2_speed_value,
+                               gp2_lat_value, gp2_lon_value, gp2_ellipsoid_value, gp2_msl_value, gp2_speed_value,
                                gp2_heading_value, gp2_hacc_value, gp2_vacc_value, gp2_pdop_value, gp2_fix_value,
                                gp2_numsv_value, gp2_carrsoln_value, gp2_spd_acc_value, gp2_hdg_acc_value,
-                               ]
+
+                               ahrs_time_value, ahrs_sync_value, ahrs_roll_value, ahrs_pitch_value, ahrs_heading_value, ahrs_zupt_value]
         buttons = [gps_button, log_button]
+
+        if not self.show_gps_info:
+            value_font_elements.remove(odo_value)
+            label_font_elements.remove(odo_label)
 
         top_layout = [buttons_row, [sg.HSeparator()], [tab_group]] #buttons on top, then tab 1 or 2
         window = sg.Window(title="Output monitoring", layout=top_layout, finalize=True, resizable=True)
@@ -1298,11 +1340,13 @@ class UserProgram:
         last_last_gp2 = b''
         last_last_imu = b''
         last_last_hdg = b''
+        last_last_ahrs = b''
         last_ins_time = time.time()
         last_gps_time = last_ins_time
         last_gp2_time = last_ins_time
         last_imu_time = last_ins_time
         last_hdg_time = last_ins_time
+        last_ahrs_time = last_ins_time
 
         #last_odo_speed = None
         last_odo_time = last_ins_time
@@ -1310,12 +1354,13 @@ class UserProgram:
         #fields by message type and tab, for zeroing out when no data.
         ins_fields = [lat, lon, speed, att0, att1, att2, soln, zupt, alt_value, ins_gps_time_value, ins_imu_time_value]
         imu_fields = [ax_value, ay_value, az_value, wx_value, wy_value, wz_value, fog_value, temp_value, imu_time_value, imu_sync_value]
+        ahrs_fields = [ahrs_time_value, ahrs_sync_value, ahrs_roll_value, ahrs_pitch_value, ahrs_heading_value, ahrs_zupt_value]
         ins_tab_gps_fields = [gps_carrsoln2, gps_fix2, num_sats_value2]
-        gps_tab_gps_fields = [gps_lat_value,gps_lon_value,gps_elipsoid_value,gps_msl_value,
+        gps_tab_gps_fields = [gps_lat_value,gps_lon_value,gps_ellipsoid_value,gps_msl_value,
                               gps_speed_value,gps_heading_value,
                               gps_hacc_value,gps_vacc_value,gps_pdop_value,
                               gps_fix_value,gps_numsv_value,gps_carrsoln_value,gps_spd_acc_value,gps_hdg_acc_value]
-        gp2_tab_gp2_fields = [gp2_lat_value, gp2_lon_value, gp2_elipsoid_value, gp2_msl_value,
+        gp2_tab_gp2_fields = [gp2_lat_value, gp2_lon_value, gp2_ellipsoid_value, gp2_msl_value,
                               gp2_speed_value, gp2_heading_value,
                               gp2_hacc_value, gp2_vacc_value, gp2_pdop_value,
                               gp2_fix_value, gp2_numsv_value, gp2_carrsoln_value, gp2_spd_acc_value, gp2_hdg_acc_value]
@@ -1327,8 +1372,10 @@ class UserProgram:
         if not self.show_gps_info:
             for clickable_item in [ins_tab, gps_tab, gp2_tab, hdg_tab, map_tab, gps_button]:
                 clickable_item.update(visible=False, disabled=True)
-            for text_item in [time_since_gps_label, time_since_gps, odo_label, odo_value]:
+            for text_item in [gps_label]:
                 text_item.update(visible=False) #text elements have no "disabled". could check if hasattr("disabled")
+        if not self.show_ahrs_tab:
+            ahrs_tab.update(visible=False, disabled=True)
 
         # update loop: check for new messages or button clicks, then update the displayed data
         while True:
@@ -1353,30 +1400,41 @@ class UserProgram:
                 #read again to update button in case of failure
                 read_resp = self.retry_command(method=self.board.get_cfg, args=[["gps1"]], response_types=[b'CFG'])
                 gps_is_on = read_resp.configurations["gps1"] == b'on'
-                gps_button.update(GPS_TEXT+TOGGLE_TEXT[gps_is_on], button_color=TOGGLE_COLORS[gps_is_on])
+                if gps_is_on:
+                    gps_button.update(image_filename=ON_BUTTON_PATH)
+                else:
+                    gps_button.update(image_filename=OFF_BUTTON_PATH)
+                #gps_button.update(GPS_TEXT+TOGGLE_TEXT[gps_is_on], button_color=TOGGLE_COLORS[gps_is_on])
             elif event == "log_button":
                 #stop if on, start if off
                 if self.log_on.value:
                     self.stop_logging()
+                    log_button.update(image_filename=OFF_BUTTON_PATH)
                 else:
                     #start log with default name
                     logname = collector.default_log_name(self.serialnum)
                     self.log_name.value = logname.encode()
                     self.log_on.value = 1
                     self.log_start.value = 1
-                #update color
-                log_button.update(LOG_TEXT+TOGGLE_TEXT[self.log_on.value], button_color=TOGGLE_COLORS[self.log_on.value])
-            elif event == "Configure": #resize, move. also triggers on button for some reason.
+                    log_button.update(image_filename=ON_BUTTON_PATH)
+            elif event == "Configure":
+                # on resize, move, button click, clicking back into window.
+                # tab switching triggers this, but irrelevent since window size didn't change.
+                # TODO - scale based on table size when tab switches, since some have longer text than others?
                 debug_print("size:")
                 debug_print(repr(window.size))
                 width, height = window.size
-                scale = min(width / base_width , height / base_height)
+                scale = min(width / base_width, height / base_height)
                 for item in value_font_elements:
-                    item.update(font=(FONT_NAME, int(VALUE_FONT_SIZE * scale)))
+                    fontname, fontsize, fontstyle = VALUE_FONT  # eg ("Tahoma", 27, "normal")
+                    item.update(font=(fontname, int(fontsize * scale), fontstyle))
                 for item in label_font_elements:
-                    item.update(font=(FONT_NAME, int(LABEL_FONT_SIZE * scale)))
+                    fontname, fontsize, fontstyle = LABEL_FONT
+                    item.update(font=(fontname, int(fontsize * scale), fontstyle))
                 for item in buttons:
-                    item.font = (FONT_NAME, int(LABEL_FONT_SIZE * scale))
+                    fontname, fontsize, fontstyle = LABEL_FONT
+                    item.font = (fontname, int(fontsize * scale), fontstyle)  # button: have to set item.font for button, not update(font=...)
+
                 #zupt.update(font = (FONT_NAME, int(VALUE_FONT_SIZE * scale)))
             #zoom in/out buttons -> update current zoom. TODO - refresh map with that zoom too?
             elif event == "zoom_in_button":
@@ -1472,11 +1530,9 @@ class UserProgram:
             if hasattr(self.last_gps_msg, "raw"):
                 #print(f"has last_gps_msg: {self.last_gps_msg.raw}")
                 elapsed = time.time() - last_gps_time
-                window["since_gps"].update('%.2f' % elapsed) #outside of tabs, do it whichever tab is active
                 #if self.last_gps_msg.value == last_last_gps:
                 if self.last_gps_msg.raw == last_last_gps:
                     #did not change - no update. but if it's been too long, zero the fields
-                    # time_since_gps.update(str(elapsed))
                     # window.refresh()
                     if elapsed > ZERO_OUT_TIME:
                         if active_tab == "numbers-tab": #zero these if tab is active
@@ -1595,15 +1651,16 @@ class UserProgram:
                                                     if hasattr(imu_msg, "sync_time_ms") else MONITOR_DEFAULT_VALUE)
 
                         #message with an odometer speed/time: update the latest speed, reset timer.
-                        if hasattr(imu_msg, "odometer_speed_mps") and hasattr(imu_msg, "odometer_time_ms") and imu_msg.odometer_time_ms > 0:
-                            #odo_value =  '%.2f' % imu_msg.odometer_speed_mps
-                            #last_odo_speed = imu_msg.odometer_speed_mps
-                            last_odo_time = time.time() #or use time of the message?
-                            window["odo_value"].update('%.2f' % imu_msg.odometer_speed_mps)
-                        #if timer runs out, blank the odo speed.
-                        elif time.time() - last_odo_time > ODOMETER_ZERO_TIME:
-                            #odo_value = MONITOR_DEFAULT_VALUE #TODO - do the timeout logic here.
-                            window["odo_value"].update(MONITOR_DEFAULT_VALUE)
+                        if self.show_gps_info:
+                            if hasattr(imu_msg, "odometer_speed_mps") and hasattr(imu_msg, "odometer_time_ms") and imu_msg.odometer_time_ms > 0:
+                                #odo_value =  '%.2f' % imu_msg.odometer_speed_mps
+                                #last_odo_speed = imu_msg.odometer_speed_mps
+                                last_odo_time = time.time() #or use time of the message?
+                                window["odo_value"].update('%.2f' % imu_msg.odometer_speed_mps)
+                            #if timer runs out, blank the odo speed.
+                            elif time.time() - last_odo_time > ODOMETER_ZERO_TIME:
+                                #odo_value = MONITOR_DEFAULT_VALUE #TODO - do the timeout logic here.
+                                window["odo_value"].update(MONITOR_DEFAULT_VALUE)
             if hasattr(self.last_hdg_msg, "raw"):
                 #print(f"last_hdg_msg.raw is {self.last_hdg_msg.raw}")
                 elapsed_hdg = time.time() - last_hdg_time
@@ -1657,13 +1714,41 @@ class UserProgram:
                                                   else MONITOR_DEFAULT_VALUE)
                         window["hdg_flags_carrsoln"].update(hdg_msg.carrSoln if hasattr(hdg_msg, "carrSoln")
                                                   else MONITOR_DEFAULT_VALUE)
+            if hasattr(self.last_ahrs_msg, "raw"):
+                #print(f"last_hdg_msg.raw is {self.last_hdg_msg.raw}")
+                elapsed_ahrs = time.time() - last_ahrs_time
+                # can update any "time since hdg" indicator here
+                if self.last_ahrs_msg.raw == last_last_ahrs:
+                    # can zero any heading fields if too much time passed
+                    if (elapsed_ahrs > ZERO_OUT_TIME) and active_tab == "ahrs-tab":  # zero out the numbers tab
+                        for field in ahrs_fields:
+                            field.update(MONITOR_DEFAULT_VALUE)
+                else:  # changed - update the last_ins and counter, then update display from the new values
+                    last_last_ahrs = self.last_ahrs_msg.raw
+                    last_ahrs_time = time.time()
+                    if active_tab == 'ahrs-tab':
+                        ahrs_msg = try_multiple_parsers([binary_scheme, ascii_scheme, rtcm_scheme], self.last_ahrs_msg.raw)
+                        #print(f"new heading message: {ahrs_msg}")
+                        #update the ahrs monitor fields here
+                        window["ahrs_time"].update('%.2f' % ahrs_msg.imu_time_ms if hasattr(ahrs_msg, "imu_time_ms")
+                                                  else MONITOR_DEFAULT_VALUE)
+                        window["ahrs_sync"].update('%.2f' % ahrs_msg.sync_time_ms if hasattr(ahrs_msg, "sync_time_ms")
+                                                  else MONITOR_DEFAULT_VALUE)
+                        window["ahrs_roll"].update('%.2f' % ahrs_msg.roll_deg if hasattr(ahrs_msg, "roll_deg")
+                                                   else MONITOR_DEFAULT_VALUE)
+                        window["ahrs_pitch"].update('%.2f' % ahrs_msg.pitch_deg if hasattr(ahrs_msg, "pitch_deg")
+                                                   else MONITOR_DEFAULT_VALUE)
+                        window["ahrs_heading"].update('%.2f' % ahrs_msg.heading_deg if hasattr(ahrs_msg, "heading_deg")
+                                                   else MONITOR_DEFAULT_VALUE)
+                        window["ahrs_zupt"].update(ZUPT_NAMES.get(ahrs_msg.zupt_flag, str(ahrs_msg.zupt_flag))
+                                                   if hasattr(ahrs_msg, "zupt_flag") else MONITOR_DEFAULT_VALUE)
 
     # tell them to get bootloader exe and hex, give upgrade instructions. Will not do this automatically yet.
     # prompt to activate boot loader mode
     def upgrade(self):
         print("\nFirmware upgrade process")
         print("\nNotes:")
-        print("\tGet the firmware file from Anello Photonics: IMU-A1_v<version number>.hex")
+        print("\tGet the firmware file from ANELLO Photonics: IMU-A1_v<version number>.hex")
         print("\tSoftware update is over USB only, not ethernet.")
         print("\tSupports Windows and Linux OS.")
 
@@ -1696,7 +1781,7 @@ class UserProgram:
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()
-                show_and_pause("\nTry cycling power on unit and connect again. If it doesn't start up, contact Anello Photonics")
+                show_and_pause("\nTry cycling power on unit and connect again. If it doesn't start up, contact ANELLO Photonics")
                 return #should it try to connect here?
 
             show_and_pause(f"\n\nFinished updating")
@@ -1722,8 +1807,9 @@ class UserProgram:
             print("\nrestarting")
             self.board.reset_with_waits(new_control_baud, new_data_baud)
     
-            # tell ioloop to use the new data port baud
-            self.data_port_baud.value = new_data_baud
+            # tell ioloop to use the new data port baud. if error reading it, assume baud didn't change
+            if new_data_baud is not None:
+                self.data_port_baud.value = new_data_baud
             self.con_start.value = 1
             while self.con_succeed.value == 0:
                 time.sleep(0.1)
@@ -1756,6 +1842,7 @@ class UserProgram:
                 else:
                     return output_msg
             except Exception as e:
+                debug_print(f"retry_command error: {e}")
                 continue #error - treat as fail, retry
         #raise Exception("retry method: " + str(method) + " failed")
         # if it failed after retries, there is a connection problem
@@ -1968,13 +2055,31 @@ def show_nmea_flags_value(number_code):
     return out_str
 
 
+# table formatting helper to use in monitor window
+# input: list of list of PySimpleGUI element
+# output: list with one Frame from each sub-list (row) and with background colors alternating.
+def alternating_color_table(layout_grid):
+    new_layout = []
+    for i, row_list in enumerate(layout_grid):
+        row_frame = sg.Frame("", [row_list], border_width=0)
+
+        # alternating rows: recolor frame and contents background
+        if (i % 2) == 1:
+            row_frame.BackgroundColor = table_color_2
+            for elem in row_list:
+                if hasattr(elem, "BackgroundColor"):
+                    elem.BackgroundColor = table_color_2
+
+        new_layout.append([row_frame])
+    return new_layout
+
 #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
 def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
                 con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                 log_on, log_start, log_stop, log_name,
                 ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                 ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+                last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg,
                 last_imu_time,
                 serial_number
     ):
@@ -1983,7 +2088,7 @@ def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
                        log_on, log_start, log_stop, log_name,
                        ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                        ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                       last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+                       last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg,
                        last_imu_time,
                        serial_number
     )
@@ -2030,6 +2135,7 @@ if __name__ == "__main__":
     last_gp2_msg = Array('c', string_size)
     last_imu_msg = Array('c', string_size)
     last_hdg_msg = Array('c', string_size)
+    last_ahrs_msg = Array('c', string_size)
 
     last_imu_time = Value('d', 0)
 
@@ -2039,7 +2145,7 @@ if __name__ == "__main__":
                    con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                    log_on, log_start, log_stop, log_name,
                    ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed, ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_imu_time,
+                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg, last_imu_time,
                    serial_number,               
     )
     io_process = Process(target=io_loop, args=shared_args)

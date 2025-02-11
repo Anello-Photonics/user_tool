@@ -8,59 +8,24 @@ from file_picking import pick_one_file, pick_multiple_files
 import json
 from user_program_config import *
 
-#default values: currently 0 for everything. could set a different value per field and message type
-gps_header = ",".join(EXPORT_GPS_FIELDS)
-gp2_header = ",".join(EXPORT_GP2_FIELDS) #in case there are any differences later
-def gps_defaults(name):
+# default value for missing message fields. all empty string for now but can add special cases here.
+def default_value(msgtype, field_name):
     return ""
-    #return "missing"
-
-ins_header = ",".join(EXPORT_INS_FIELDS)
-def ins_defaults(name):
-    return ""
-    #return "missing"
-
-imu_header = ",".join(EXPORT_IMU_FIELDS)
-def imu_defaults(name):
-    return ""
-    #return "missing"
-
-im1_header = ",".join(EXPORT_IM1_FIELDS)
-def im1_defaults(name):
-    return ""
-    #return "missing"
-
-hdg_header = ",".join(EXPORT_HDG_FIELDS)
-def hdg_defaults(name):
-    return ""
-    #return "missing"
-
-
-all_show_fields = {b'GPS': EXPORT_GPS_FIELDS,
-                   b'GP2': EXPORT_GPS_FIELDS,
-                   b'INS': EXPORT_INS_FIELDS,
-                   b'IMU': EXPORT_IMU_FIELDS,
-                   b'IM1': EXPORT_IM1_FIELDS,
-                   b'HDG': EXPORT_HDG_FIELDS,}
-
-all_defaults = {b'GPS': gps_defaults, b'GP2': gps_defaults, b'INS': ins_defaults, b'IMU': imu_defaults,
-                b'IM1': im1_defaults, b'HDG': hdg_defaults}
-
 
 # formatted point feature to put in csv
 def position_for_csv(msg):
     lat, lon, props = 0,0, {}
     if msg.msgtype == b'INS' or msg.msgtype == b'IN':
-        lat = msg.lat_deg if hasattr(msg, "lat_deg") else ins_defaults("lat_deg")
-        lon = msg.lon_deg if hasattr(msg, "lon_deg") else ins_defaults("lon_deg")
+        lat = msg.lat_deg if hasattr(msg, "lat_deg") else default_value(msg.msgtype, "lat_deg")
+        lon = msg.lon_deg if hasattr(msg, "lon_deg") else default_value(msg.msgtype, "lon_deg")
         try:
             fillColor = EXPORT_INS_COLORS[getattr(msg, EXPORT_INS_COLOR_BASED_ON)]
         except Exception: # missing attribute or bad value
             fillColor = EXPORT_DEFAULT_COLOR
         props = {"radius": EXPORT_INS_RADIUS, "fillColor": fillColor} # could do radius and color based on variables
     elif msg.msgtype == b'GPS' or msg.msgtype == b'GP2' or msg.msgtype == b'GP':
-        lat = msg.lat_deg if hasattr(msg, "lat_deg") else gps_defaults("lat_deg")
-        lon = msg.lon_deg if hasattr(msg, "lon_deg") else gps_defaults("lon_deg")
+        lat = msg.lat_deg if hasattr(msg, "lat_deg") else default_value(msg.msgtype, "lat_deg")
+        lon = msg.lon_deg if hasattr(msg, "lon_deg") else default_value(msg.msgtype, "lon_deg")
         try:
             fillColor = EXPORT_GPS_COLORS[getattr(msg, EXPORT_GPS_COLOR_BASED_ON)]
         except Exception:
@@ -71,7 +36,7 @@ def position_for_csv(msg):
     return "\"" + json.dumps(feature_dict).replace("\"", "\"\"") + "\""
 
 
-#format of some field in the csv:
+# format of some field in the csv:
 def format_field(msgtype, var_name, value):
     # float: force decimal since Kepler.gl will turn exponential notation into "string"
     if type(value) is float:
@@ -109,79 +74,45 @@ def export_logs_detect_format():
 def export_log_by_format(file_path, format="rtcm"):
     if format == "ascii":
         parse_scheme = ReadableScheme()
-        #start_char = b'#'
     elif format == "rtcm":
         parse_scheme = RTCM_Scheme()
-        #start_char = b'\xD3'
     elif format == "binary":
         parse_scheme = Binary_Scheme()
     else:
         print(f"unknown format {format}, must be ascii, binary or rtcm")
         return
 
-    # if format == "ascii":
-    #     reader = FileReaderConnection(input_path) #wrapper around input file, has read_until method which ascii uses
-    # elif format == "rtcm":
-    #     reader = open(input_path, 'rb')
-
     reader = FileReaderConnection(file_path) #should work for either format
 
-    # pick name and location for output files
-    input_location = os.path.dirname(file_path)
-    input_filename = os.path.basename(file_path) # should it take off the .txt or other extension?
+    # pick name and location for output files: log file name with extension removed
+    input_filename = os.path.basename(file_path)
     if "." in input_filename:
-        input_notype = input_filename[:input_filename.find(".")] # before the .
+        input_notype = input_filename[:input_filename.find(".")]
     else:
         input_notype = input_filename
 
-    # create new csv files for IMU, INS, GPS messages
-    export_path = os.path.join(os.path.dirname(__file__), "..", "exports", input_notype) # exports directory
-    #export_subdir = "export_"+input_notype  # sub-directory for this export only
-    #export_fullpath = os.path.join(export_topdir, export_subdir)
+    # add directory where csv will go, based on log file name
+    export_path = os.path.join(os.path.dirname(__file__), "..", "exports", input_notype)
     os.makedirs(export_path, exist_ok=True)
 
-    ins_file_path = os.path.join(export_path, f"{input_notype}_ins.csv")
-    ins_out = open(ins_file_path, 'w') # will overwrite the csv if it already exists
-    print("exporting to "+os.path.normpath(ins_file_path))
-    ins_out.write(ins_header)
+    # create log files and put header line in each
+    all_outputs = {}
+    message_counts = {}
 
-    gps_file_path = os.path.join(export_path, f"{input_notype}_gps.csv")
-    print("exporting to " + os.path.normpath(gps_file_path))
-    gps_out = open(gps_file_path, 'w')
-    gps_out.write(gps_header)
+    for msgtype, fields in EXPORT_ALL_MESSAGES.items():
+        msgtype_string = msgtype.decode().lower()
+        csv_file_path = os.path.join(export_path, f"{input_notype}_{msgtype_string}.csv")
+        out_file = open(csv_file_path, 'w')
+        csv_header = ",".join(fields)
+        out_file.write(csv_header)
 
-    gp2_file_path = os.path.join(export_path, f"{input_notype}_gp2.csv")
-    print("exporting to " + os.path.normpath(gp2_file_path))
-    gp2_out = open(gp2_file_path, 'w')
-    gp2_out.write(gp2_header) #use same header for now
-
-    imu_file_path = os.path.join(export_path, f"{input_notype}_imu.csv")
-    print("exporting to " + os.path.normpath(imu_file_path))
-    imu_out = open(imu_file_path, 'w')
-    imu_out.write(imu_header)
-
-    im1_file_path = os.path.join(export_path, f"{input_notype}_im1.csv")
-    print("exporting to " + os.path.normpath(im1_file_path))
-    im1_out = open(im1_file_path, 'w')
-    im1_out.write(im1_header)
-
-    hdg_file_path = os.path.join(export_path, f"{input_notype}_hdg.csv")
-    print("exporting to " + os.path.normpath(hdg_file_path))
-    hdg_out = open(hdg_file_path, 'w')
-    hdg_out.write(hdg_header)
-
-
-    all_outputs = {b'GPS': gps_out, b'GP2': gp2_out, b'INS': ins_out, b'IMU': imu_out, b'IM1': im1_out, b'HDG': hdg_out}
-
+        all_outputs[msgtype] = out_file
+        message_counts[msgtype] = 0
 
     # for each line in log file (read though, split on start or end codes):
         # parse as a message: this is the most readable way of specifying fields - by names instead of index
         # put in the csv for that type
 
-    # line = reader.readline()
-    # line = line.strip(start_char)
-
-    #print("line: "+line.decode())
     errors_count = 0
     line_num = 0
     while True: #until read empty - TODO figure out the loop condition
@@ -201,42 +132,46 @@ def export_log_by_format(file_path, format="rtcm"):
         if m is None: #done reading
             break
 
-        #print(m)
-        if m and m.valid and m.msgtype in EXPORT_MESSAGE_TYPES:
+        if m and m.valid and m.msgtype in EXPORT_ALL_MESSAGES:
             # put whichever data we want based on message type and write to the csv for that type.
             # get each att rby name so it doesn't get show message.valid, checksum_input, etc
             # TODO - make a "message fields" structure in message for the fields so its not mixed together
             out_list = []
             msgtype = m.msgtype
-            defaults = all_defaults[msgtype]
             out_file = all_outputs[msgtype]
 
-            for name in all_show_fields[msgtype]: # or show_fields[m.msgtype]
-                if name == "position_geojson": #do any constructed fields which are not a message field
-                    # create and add it to the list
-                    out_list.append(position_for_csv(m)) # or
-                # any other constructed fields: add as conditions here
+            for name in EXPORT_ALL_MESSAGES[msgtype]:
+                # do any constructed fields like position_geojson which are not in the message
+                if name == "position_geojson":
+                    out_list.append(position_for_csv(m))
                 else:
                     # use the existing message field, or default value
                     if hasattr(m, name):
                         value = getattr(m, name)
                         out_list.append(format_field(msgtype, name, value))
                     else:
-                        out_list.append(str(defaults(name)))
+                        out_list.append(str(default_value(m.msgtype, name)))
             out_line = "\n"+",".join(out_list)
-            out_file.write(out_line) # outputs[m.msgtype].write(out_line)
+            out_file.write(out_line)
+            message_counts[msgtype] += 1
 
+        elif m and m.valid:
+            # valid message but not in EXPORT_MESSAGE_TYPES : currently INF is this. do anything for these?
+            pass
         else:
             errors_count += 1
             debug_print(f"\ninvalid message on line {line_num}: type = {m.msgtype if hasattr(m, 'msgtype') else 'None'}, valid = {m.valid}")
             debug_print(m)
 
     reader.close()
-    ins_out.close()
-    gps_out.close()
-    imu_out.close()
-    im1_out.close()
-    hdg_out.close()
+
+    for out_file in all_outputs.values():
+        out_file.close()
+
+    # remove any empty csv, for message types which were not in the log
+    for msgtype, count in message_counts.items():
+        if count == 0:
+            os.remove(all_outputs[msgtype].name)
 
     if errors_count == 1:
         print(f"\n1 message failed to parse")

@@ -173,7 +173,7 @@ def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
             log_on, log_start, log_stop, log_name,
             ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
             ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-            last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+            last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg,
             last_imu_time,
             shared_serial_number
     ):
@@ -392,6 +392,8 @@ def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
                             elif last_msg.msgtype == b'GP2':
                                 #print(f"\nlast_gp2_msg {type(parse_scheme)}:\n{part}")
                                 last_gp2_msg.value = part # save if needed for ntrip start or delayed sending
+                            elif last_msg.msgtype == b'AHRS':
+                                last_ahrs_msg.value = part
 
                         # if the last part is not a complete message, keep it to finish later.
                         last_part = parts[-1]

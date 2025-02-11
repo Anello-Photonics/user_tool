@@ -180,17 +180,17 @@ class Binary_Scheme(Scheme):
             # do MEMS range conversions -> scale the accel and rate
             # mems ranges: 5 bits accel range, 11 bits rate range. fog range is just one
             # don't adjust for fog range yet, not used and usually set to 0
-            if message.msgtype == b'IMU' and message.valid:
+            if message.msgtype in [b'IMU', b'IMX'] and message.valid:
                 message.accel_range = message.mems_ranges // pow(2,11)
                 message.rate_range = message.mems_ranges - (message.accel_range * pow(2,11))
 
                 for accel_attr in ["accel_x_g", "accel_y_g", "accel_z_g"]:
                     setattr(message, accel_attr, message.accel_range * getattr(message, accel_attr))
 
-                for rate_attr in ["angrate_x_dps", "angrate_y_dps", "angrate_z_dps"]:
-                    setattr(message, rate_attr, message.rate_range * getattr(message, rate_attr))
-
-
+                for rate_attr in ["angrate_x_dps", "angrate_y_dps", "angrate_z_dps",
+                                  "fog_angrate_x_dps", "fog_angrate_y_dps", "fog_angrate_z_dps"]:
+                    if hasattr(message, rate_attr):
+                        setattr(message, rate_attr, message.rate_range * getattr(message, rate_attr))
 
         except Exception as e:
             print(f"error in set_fields_general for data: {raw_data}")
@@ -237,10 +237,10 @@ class Binary_Scheme(Scheme):
         self.set_fields_from_list_scaled(message, msg_format, payload)
 
         # any parsing special cases go here
-
         # HDG: extra flags to extract
         if msgtype == BINARY_MSGTYPE_HDG:
             extract_flags_HDG(message)  # separate the heading flags in "flags" attribute, from ReadableScheme
+
 
         # split X3 status bit fields. one "16 bit" int is really 12 bits, 4 status bits per siphog
         if msgtype == BINARY_MSGTYPE_X3_IMU and hasattr(message, "status_info"):

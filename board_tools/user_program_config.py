@@ -1,6 +1,12 @@
 #__________Main user program configs__________:
 DEBUG = False
 import time
+
+import sys
+import pathlib
+parent_dir = str(pathlib.Path(__file__).parent)
+sys.path.append(parent_dir+'/src/tools/class_configs')
+from readable_scheme_config import INI_UPD_ERROR_CODES
 import os
 
 def debug_print(text):
@@ -23,6 +29,7 @@ MENU_OPTIONS = [
     #"Plot", # put this back in menu when implemented
     "Exit"
 ]
+
 
 MENU_OPTIONS_WHEN_DISCONNECTED = [
     "Refresh",
@@ -58,7 +65,7 @@ CFG_CODES_TO_NAMES = {
     "odo":          "Odometer                                ",
     "fog":          "Enable FOG                              ", #TODO - remove this? may not do anything.
     "dhcp":         "DHCP (Auto Assign IP)                   ",
-    "lip":          "UDP A-1 IP                              ",
+    "lip":          "UDP ANELLO Product IP                   ",
     "rip":          "UDP Computer IP                         ",
     "rport1":       "UDP Computer Data Port                  ",
     "rport2":       "UDP Computer Configuration Port         ",
@@ -122,6 +129,7 @@ CFG_VALUE_OPTIONS = {
     "ahrs": ['1', '0'],
     "azupt": ['1', '0'],
 }
+
 RS232_BAUDS = ["19200", "57600", "115200", "230400"]
 
 CFG_VALUE_NAMES = {
@@ -176,6 +184,7 @@ BASELINE_TOLERANCE_FOR_WARNING = 0.1  # allow 10 cm before warning
 BCAL_LEVER_ARM_WAIT_SECONDS = 3
 
 #UDP constants
+
 #A1_port1 = UDP_LOCAL_DATA_PORT
 #A1_port2 = UDP_LOCAL_CONFIG_PORT
 UDP_CACHE = os.path.join("board_tools", "udp_settings.txt")
@@ -193,7 +202,6 @@ RUNNING_RETRIES = 10
 FLUSH_FREQUENCY = 200
 
 #__________Log export configs__________:
-EXPORT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
 EXPORT_IMU_FIELDS = ["imu_time_ms", "sync_time_ms",
                      "accel_x_g", "accel_y_g", "accel_z_g",
@@ -237,6 +245,22 @@ EXPORT_HDG_FIELDS = [
     "relPosHeading_Valid", "relPos_Normalized",
 ]
 
+EXPORT_AHRS_FIELDS = [
+    "imu_time_ms", "sync_time_ms",
+    "roll_deg", "pitch_deg", "heading_deg",
+    "zupt_flag",
+]
+
+EXPORT_ALL_MESSAGES = {
+    b'GPS': EXPORT_GPS_FIELDS,
+    b'GP2': EXPORT_GPS_FIELDS,
+    b'INS': EXPORT_INS_FIELDS,
+    b'IMU': EXPORT_IMU_FIELDS,
+    b'IM1': EXPORT_IM1_FIELDS,
+    b'HDG': EXPORT_HDG_FIELDS,
+    b'AHRS': EXPORT_AHRS_FIELDS,
+}
+
 EXPORT_DEFAULT_COLOR = [200, 200, 200]
 
 EXPORT_GPS_RADIUS = 3
@@ -248,6 +272,10 @@ EXPORT_INS_COLOR_BASED_ON = "zupt_flag"
 EXPORT_INS_COLORS = {0: [0, 255, 0], 1: [255, 0, 0]}
 
 #__________monitor configs__________:
+
+ON_BUTTON_FILE = "button_on.png"
+OFF_BUTTON_FILE = "button_off.png"
+
 #general configs
 MONITOR_MAP_TAB_TITLE = "MAP"
 MONITOR_INS_TAB_TITLE = "INS"
@@ -255,39 +283,132 @@ MONITOR_IMU_TAB_TITLE = "IMU"
 MONITOR_GPS_TAB_TITLE = "GPS"
 MONITOR_GP2_TAB_TITLE = "GP2"
 MONITOR_HDG_TAB_TITLE = "HDG"
+MONITOR_AHRS_TAB_TITLE = "AHRS"
 MONITOR_REFRESH_MS = 200 #100
 ZERO_OUT_TIME = 5
 ODOMETER_ZERO_TIME = 10 #put a long time because odo in monitor updates slowly. at 5, it can blank with odo running.
 SGTHEME = "Reddit"
+table_color_2 = "light blue"
 # BASE_WIDTH = 1124
 # BASE_HEIGHT = 554
 MONITOR_ALIGN = "right" #alignemnt for label and value text in monitor. can be "left", "right", "center"
 
 #tab 1: numbers monitoring
 MONITOR_DEFAULT_VALUE = "--------------"
-MONITOR_TIMELABEL_SIZE = (10,1)
-MONITOR_TIME_SIZE = (6,1)
-MONITOR_VALUE_SIZE = (15, 1)
-FONT_NAME = "arial"
-VALUE_FONT_SIZE = 25
-MONITOR_LABEL_SIZE = (20,1)
-LABEL_FONT_SIZE = 20
-GPS_TEXT = "GPS: "
-LOG_TEXT = "LOG: "
-TOGGLE_TEXT = {True:"ON", False: "OFF"}
+MONITOR_TIMELABEL_SIZE = (10, 1)
+MONITOR_TIME_SIZE = (6, 1)
+
+# fonts are "font family", "size", "style"
+# style = italic, roman, bold, normal, underline, overstrike
+LABEL_FONT = ("Tahoma", 24, "bold")
+VALUE_FONT = ("Tahoma", 24, "normal")
+
+# use different text box sizes per tab.
+# aim to have all tabs sum ~ 40, but bold is larger than non-bold
+INS_TAB_LABEL_SIZE = 18  # largest: "Number of Satellites"
+INS_TAB_VALUE_SIZE = 22  # largest: GPS time ns number
+
+AHRS_TAB_LABEL_SIZE = 18  # largest : "IMU time (ms)"  : 10 cuts off, 18 fits
+AHRS_TAB_VALUE_SIZE = 22  # largest: imu time or sync time, 18 fits
+
+IMU_TAB_LABEL_SIZE = 20  # largest:  Odometer Speed (m/s) : 18 slightly too small, 20 fits.
+IMU_TAB_VALUE_SIZE = 20  # largest: imu time or sync time. 18 fits imu time
+
+GPS_TAB_LABEL_SIZE = 24  # minimum 23 to fit "Altitude, Mean Sea Level (m)" which is 28 characters.
+GPS_TAB_VALUE_SIZE = 15  # longest: lat and lon, 12 is close fit
+
+HDG_TAB_LABEL_SIZE = 27  # largest: Reference Observation Miss Flag : 26 close fit, sometimes cuts off.
+HDG_TAB_VALUE_SIZE = 12
+
+GPS_TEXT = "GPS "
+LOG_TEXT = "DATA LOGGING "
+TOGGLE_TEXT = {True: "ON", False: "OFF"}
 TOGGLE_COLORS = {True: "green", False: "red"}
 BUTTON_DISABLE_COLOR = "gray"
-GPS_SOLN_NAMES = {0: "No solution", 1: "Float", 2: "Fix"}
+GPS_SOLN_NAMES = {0: "No Fix", 1: "Float", 2: "Fix"}
 GPS_FIX_NAMES = {0: "No Fix",
                  1: "Dead Reckoning Only",
                  2: "2D-Fix",
                  3: "3D-Fix",
                  4: "GNSS + Dead Reckoning",
                  5: "Time Only Fix" } #from nav-pvt fix-type: see https://www.u-blox.com/en/docs/UBX-18010854
-INS_SOLN_NAMES = {255: "No Attitude", 0: "Attitude Only", 1: "INS (Pos. Only)", 2: "INS (Full Soln.)", 3: "RTK Float", 4: "RTK Fix"}
+INS_SOLN_NAMES = {255: "Uninitialized", 0: "Attitude Initialized", 1: "Position Initialized",
+                  2: "Full Solution Initialized", 3: "RTK Float", 4: "RTK Fix"}
 ZUPT_NAMES = {0: "Moving", 1: "Stationary"}
 
-#tab 2: map
+# monitor label text
+
+# INS tab
+INS_LAT_TEXT = "Latitude (deg)"
+INS_LON_TEXT = "Longitude (deg)"
+INS_SPEED_TEXT = "Speed (m/s)"
+INS_ROLL_TEXT = "Roll (deg)"
+INS_PITCH_TEXT = "Pitch (deg)"
+INS_HEADING_TEXT = "Heading (deg)"
+INS_SOLN_TEXT = "INS Status"
+INS_ZUPT_TEXT = "State"
+INS_ALT_TEXT = "Altitude (m)"
+
+# timestamps used across imu/ins/gps
+IMU_TIME_TEXT = "IMU Time (ms)"
+GPS_TIME_TEXT = "GPS Time (ns)"
+SYNC_TIME_TEXT = "Sync Time (ms)"
+
+# GPS and GP2 Tabs
+GPS_LAT_TEXT = "Latitude (deg)"
+GPS_LON_TEXT = "Longitude (deg)"
+GPS_ALT_ELLIPSOID_TEXT = "Altitude, Ellipsoid (m)"
+GPS_ALT_MSL_TEXT = "Altitude, Mean Sea Level (m)"
+GPS_SPEED_TEXT = "Speed (m/s)"
+GPS_HEADING_TEXT = "Heading (deg)"
+GPS_HACC_TEXT = "Horizontal Accuracy (m)"
+GPS_VACC_TEXT = "Vertical Accuracy (m)"
+GPS_PDOP_TEXT = "PDOP"
+GPS_FIX_TEXT = "Fix Type"
+GPS_NUMSV_TEXT = "Number of Satellites"
+GPS_CARRSOLN_TEXT = "RTK Fix Status"
+GPS_SPEEDACC_TEXT = "Speed Accuracy (m/s)"
+GPS_HDG_ACC_TEXT = "Heading Accuracy (deg)"
+
+# IMU tab
+MEMS_AX_TEXT = "Accel x (g)"
+MEMS_AY_TEXT = "Accel y (g)"
+MEMS_AZ_TEXT = "Accel z (g)"
+MEMS_WX_TEXT = "MEMS Rate x (deg/s)"
+MEMS_WY_TEXT = "MEMS Rate y (deg/s)"
+MEMS_WZ_TEXT = "MEMS Rate z (deg/s)"
+FOG_WZ_TEXT = "FOG Rate z (deg/s)"
+TEMP_C_TEXT = "Temperature (C)"
+ODO_TEXT = "Odometer Speed (m/s)"
+
+# HDG tab
+HDG_HEADING_TEXT = "Dual Antenna Heading (deg)"
+HDG_LENGTH_TEXT = "Dual Antenna Length (m)"
+HDG_NORTH_TEXT = "Relative Position North (m)"
+HDG_EAST_TEXT = "Relative Position East (m)"
+HDG_DOWN_TEXT = "Relative Position Down (m)"
+HDG_LEN_ACC_TEXT = "Length Accuracy (m)"
+HDG_HDG_ACC_TEXT = "Heading Accuracy (deg)"
+HDG_FLAGS_TEXT = "Dual Antenna Flags"
+HDG_FLAGS_FIXOK_TEXT = "Fix OK Flag"
+HDG_FLAGS_DIFFSOLN_TEXT = "Differential Solution Flag"
+HDG_FLAGS_POSVALID_TEXT = "Relative Position Valid Flag"
+HDG_FLAGS_ISMOVING_TEXT = "Is Moving Flag"
+HDG_FLAGS_REFPOSMISS_TEXT = "Reference Position Miss Flag"
+HDG_FLAGS_REFOBSMISS_TEXT = "Reference Observation Miss Flag"
+HDG_FLAGS_HDGVALID_TEXT = "Heading Valid Flag"
+HDG_FLAGS_NORMALIZED_TEXT = "Normalized Flag"
+HDG_FLAGS_CARRSOLN_TEXT = "Carrier Solution Flag"
+
+# AHRS tab - use same names as in IMU/INS?
+AHRS_TIME_TEXT = IMU_TIME_TEXT
+AHRS_SYNC_TEXT = SYNC_TIME_TEXT
+AHRS_ROLL_TEXT = INS_ROLL_TEXT
+AHRS_PITCH_TEXT = INS_PITCH_TEXT
+AHRS_HEADING_TEXT = INS_HEADING_TEXT
+AHRS_ZUPT_TEXT = INS_ZUPT_TEXT
+
+# map tab
 
 #sources for map, should be exact string that geotiler.draw_map uses. # TODO : use other names like "Open Street Map" <-> "osm" ?
 # MAP_PROVIDERS = ["osm", "stamen-terrain"] #osm and stamen-terrain seem like good options
@@ -311,13 +432,13 @@ MAP_PROVIDER_CREDITS = {
 
 PROVIDER_CREDIT_SIZE = 10
 
-ARROW_FILE_NAME = "chevron_outlined_and_shaded.png" #"big_chevron.png" #name of image file inside map directory
+ARROW_FILE_NAME = "map_arrow_larger_center.png" #name of image file inside map directory
 MAP_ARROW_SIZE = 50
 MAP_ZOOM_MAX = 18 #19 is max for OSM but stamen-terrain seems to only go to 18. TODO - separate min and max for each provider?
 MAP_ZOOM_MIN = 8 #could go down to 1=whole earth, but 3 and below have some load errors
 MAP_ZOOM_DEFAULT = 16
 DEFAULT_MAP_IMAGE = "default_map.png"
-MAP_DIMENSIONS = (1000, 700)
+MAP_DIMENSIONS = (1200, 700)
 MAX_CACHE_TILES = 2000 #max tiles in map LRU cache in case of memory limit. TODO - calculate how many we can fit in memory.
 # at office: 700x500 pixel map was 9 or 12 tiles, full zoom range with osm and stamen-terrain was 240 total
 
