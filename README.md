@@ -28,9 +28,7 @@ This repo contains tools for logging and configuring with the Anello A-1.
             - sudo apt install matplotlib
             - sudo apt install numpy
 
-This project is licensed under the MIT License.
-
 License information for maps feature: the user can select OpenStreetMap or Stamen in the dropdown in maps tab of monitor window.
 
-With "osm" selected: Map images from OpenStreetMap under ODbL (openstreetmap.org/copyright)",
-With "stamen-terrain" selected: Map tiles by Stamen Design (stamen.com) under CC BY 3.0 (creativecommons.org/licenses/by/3.0). Data by OpenStreetMap under ODbL (openstreetmap.org/copyright)
+with "osm" selected: Map images from OpenStreetMap under ODbL (openstreetmap.org/copyright)",
+with "stamen-terrain" selected: Map tiles by Stamen Design (stamen.com) under CC BY 3.0 (creativecommons.org/licenses/by/3.0). Data by OpenStreetMap under ODbL (openstreetmap.org/copyright)

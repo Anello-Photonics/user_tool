@@ -21,14 +21,15 @@ RTCM_MSGTYPE_IMU = 1
 RTCM_MSGTYPE_GPS = 2
 RTCM_MSGTYPE_HEADING = 3
 RTCM_MSGTYPE_INS = 4
-RTCM_MSGTYPE_HPP = 5 #high precision position, not implemented yet
 RTCM_MSGTYPE_IM1 = 6
+RTCM_MSGTYPE_INFO = 7
+RTCM_MSGTYPE_AHRS = 8
 RTCM_MSGTYPE_UBX1 = 14 #ublox 1 raw output, not implemented yet
 RTCM_MSGTYPE_UBX2 = 15 #ublox 2 raw output, not implemented yet
 
 #all the allowed types. TODO - should this be an enum? or use EQUIVALENT_MESSAGE_TYPES.keys as the list?
-RTCM_MESSAGE_TYPES = [RTCM_MSGTYPE_IMU, RTCM_MSGTYPE_GPS, RTCM_MSGTYPE_HEADING, RTCM_MSGTYPE_INS, RTCM_MSGTYPE_HPP,
-                      RTCM_MSGTYPE_IM1,RTCM_MSGTYPE_UBX1, RTCM_MSGTYPE_UBX2]
+RTCM_MESSAGE_TYPES = [RTCM_MSGTYPE_IMU, RTCM_MSGTYPE_GPS, RTCM_MSGTYPE_HEADING, RTCM_MSGTYPE_INS,
+                      RTCM_MSGTYPE_IM1, RTCM_MSGTYPE_UBX1, RTCM_MSGTYPE_UBX2, RTCM_MSGTYPE_INFO, RTCM_MSGTYPE_AHRS]
 
 #use this to tag message ojbects with the same ascii message types
 EQUIVALENT_MESSAGE_TYPES = {
@@ -37,6 +38,8 @@ EQUIVALENT_MESSAGE_TYPES = {
     RTCM_MSGTYPE_GPS: b'GPS', #but also GP2 depending on the antenna id
     RTCM_MSGTYPE_IM1: b'IM1',
     RTCM_MSGTYPE_HEADING: b'HDG',
+    RTCM_MSGTYPE_INFO: b'INF',
+    RTCM_MSGTYPE_AHRS: b'AHRS',
 }
 
 #IMU message:       payload (not including msgnum/subtype) adds to 48 bytes, agrees with payload length
@@ -207,4 +210,40 @@ RTCM_INS_PAYLOAD_FIELDS = [
     ("heading_deg", "i", 1e-5), #head_frac_deg
     ("zupt_flag", "B"), #zupt_flag
     ("ins_solution_status_and_gps_used", "B") #status
+]
+
+RTCM_INFO_PAYLOAD_FIELDS = [
+    ("aln_x_deg", "i", 1e-5),
+    ("aln_y_deg", "i", 1e-5),
+    ("aln_z_deg", "i", 1e-5),
+    ("antenna_1_x_m", "i", 1e-5),
+    ("antenna_1_y_m", "i", 1e-5),
+    ("antenna_1_z_m", "i", 1e-5),
+    ("antenna_2_x_m", "i", 1e-5),
+    ("antenna_2_y_m", "i", 1e-5),
+    ("antenna_2_z_m", "i", 1e-5),
+    ("vehicle_center_x_m", "i", 1e-5),
+    ("vehicle_center_y_m", "i", 1e-5),
+    ("vehicle_center_z_m", "i", 1e-5),
+    ("output_center_x_m", "i", 1e-5),
+    ("output_center_y_m", "i", 1e-5),
+    ("output_center_z_m", "i", 1e-5),
+    ("odometer_center_x_m", "i", 1e-5),
+    ("odometer_center_y_m", "i", 1e-5),
+    ("odometer_center_z_m", "i", 1e-5),
+    ("wheelbase_m", "i", 1e-5),
+    ("antenna_baseline_m", "i", 1e-5),
+    ("accel_filter_cutoff_Hz", "H"),
+    ("mems_rate_filter_cutoff_Hz", "H"),
+    ("fog_rate_filter_cutoff_Hz", "H"),
+    ("orientation", "B"),  # code from 1-8?
+]
+
+RTCM_AHRS_PAYLOAD_FIELDS = [
+    ("imu_time_ns", "Q"),
+    ("sync_time_ns", "Q"),
+    ("roll_deg", "i", 1e-5),
+    ("pitch_deg", "i", 1e-5),
+    ("heading_deg", "i", 1e-5),
+    ("zupt_flag", "B"),
 ]

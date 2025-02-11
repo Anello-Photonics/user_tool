@@ -34,11 +34,13 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.file_picking import pick_one_file, pick_multiple_files
     from board_tools.log_config_x3 import log_board_config
 
+    LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+    ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
+    OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
+
 X3_TOOL_VERSION = "1.0"
 
-LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
-
-#interface for A1 configuration and logging
+#interface for X3 configuration and logging
 class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
@@ -157,7 +159,7 @@ class UserProgram:
         pass
 
     def show_info(self):
-        print(f"\nAnello X3 Setup Tool, version {X3_TOOL_VERSION}, " + date_time())
+        print(f"\nANELLO X3 Setup Tool, version {X3_TOOL_VERSION}, " + date_time())
         print("\nSystem Status:")
         self.show_device()
         self.show_connection()
@@ -166,7 +168,7 @@ class UserProgram:
     def show_device(self):
         if self.con_on.value and self.connection_info:
             print(
-                  f"    Product type: {self.product_id}"
+                  f"    Product type: {self.product_id.upper()}"
                   f"\n    Serial: {self.serialnum}"
                   f"\n    Firmware version: {self.version}")
 
@@ -441,70 +443,78 @@ class UserProgram:
 
         sg.theme(SGTHEME)
 
-        label_font = (FONT_NAME, LABEL_FONT_SIZE)
-        value_font = (FONT_NAME, VALUE_FONT_SIZE)
+        # label_font = LABEL_FONT
+        # value_font = VALUE_FONT
 
         #________________Top bar with log button and logo_______________________
-        log_button = sg.Button(LOG_TEXT+TOGGLE_TEXT[self.log_on.value], key="log_button",  enable_events=True,
-                               font=value_font, button_color=TOGGLE_COLORS[self.log_on.value])
+        starting_img = ON_BUTTON_PATH if self.log_on.value else OFF_BUTTON_PATH
+        log_button = sg.Button(image_filename=starting_img, key="log_button", enable_events=True,
+                               button_color=sg.theme_background_color(), border_width=0)
         anello_logo = sg.Image(LOGO_PATH, size=(300, 80))
-        buttons_row = [log_button, anello_logo]
+        log_label = sg.Text(LOG_TEXT, font=LABEL_FONT)
+        buttons_row = [sg.Push(), log_label, log_button, sg.Push(), sg.Push(), sg.Push(), sg.Push(), anello_logo]
 
         # ________________ IMU Data _______________________
 
-        ax_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ax_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        ay_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ay_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        az_value = sg.Text(MONITOR_DEFAULT_VALUE, key="az_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wx_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wx_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wy_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wy_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        wz_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wz_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        ax_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ax_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        ay_value = sg.Text(MONITOR_DEFAULT_VALUE, key="ay_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        az_value = sg.Text(MONITOR_DEFAULT_VALUE, key="az_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wx_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wx_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wy_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wy_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        wz_value = sg.Text(MONITOR_DEFAULT_VALUE, key="wz_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        fog_x_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_x_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        fog_y_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_y_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        fog_z_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_z_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        fog_x_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_x_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        fog_y_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_y_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        fog_z_value = sg.Text(MONITOR_DEFAULT_VALUE, key="fog_z_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        mag_x_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_x_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        mag_y_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_y_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        mag_z_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_z_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        mag_x_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_x_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        mag_y_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_y_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        mag_z_value = sg.Text(MONITOR_DEFAULT_VALUE, key="mag_z_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        temp_value = sg.Text(MONITOR_DEFAULT_VALUE, key="temp_value", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_cpu_time", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
-        imu_sync_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_sync_time", size=MONITOR_VALUE_SIZE, font=value_font, justification=MONITOR_ALIGN)
+        temp_value = sg.Text(MONITOR_DEFAULT_VALUE, key="temp_value", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        imu_time_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_cpu_time", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
+        imu_sync_value = sg.Text(MONITOR_DEFAULT_VALUE, key="imu_sync_time", size=IMU_TAB_VALUE_SIZE, font=VALUE_FONT, justification=MONITOR_ALIGN)
 
-        ax_label = sg.Text(MEMS_AX_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        ay_label = sg.Text(MEMS_AY_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        az_label = sg.Text(MEMS_AZ_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wx_label = sg.Text(MEMS_WX_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wy_label = sg.Text(MEMS_WY_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        wz_label = sg.Text(MEMS_WZ_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        ax_label = sg.Text(MEMS_AX_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        ay_label = sg.Text(MEMS_AY_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        az_label = sg.Text(MEMS_AZ_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wx_label = sg.Text(MEMS_WX_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wy_label = sg.Text(MEMS_WY_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        wz_label = sg.Text(MEMS_WZ_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        fog_x_label = sg.Text("FOG Rate x (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        fog_y_label = sg.Text("FOG Rate y (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        fog_z_label = sg.Text("FOG Rate z (deg/s):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        fog_x_label = sg.Text("FOG Rate x (deg/s)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        fog_y_label = sg.Text("FOG Rate y (deg/s)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        fog_z_label = sg.Text("FOG Rate z (deg/s)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        mag_x_label = sg.Text("Magnetometer x (G):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        mag_y_label = sg.Text("Magnetometer y (G):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        mag_z_label = sg.Text("Magnetometer z (G):", size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        mag_x_label = sg.Text("Magnetometer x (G)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        mag_y_label = sg.Text("Magnetometer y (G)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        mag_z_label = sg.Text("Magnetometer z (G)", size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        temp_label = sg.Text(TEMP_C_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        temp_label = sg.Text(TEMP_C_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        imu_time_label = sg.Text(IMU_TIME_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
-        imu_sync_label = sg.Text(SYNC_TIME_TEXT, size=MONITOR_LABEL_SIZE, font=label_font, justification=MONITOR_ALIGN)
+        imu_time_label = sg.Text(IMU_TIME_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
+        imu_sync_label = sg.Text(SYNC_TIME_TEXT, size=IMU_TAB_LABEL_SIZE, font=LABEL_FONT, justification=MONITOR_ALIGN)
 
-        # accel_row = [ax_label, ax_value, ay_label, ay_value, az_label, az_value]
-        # mems_rate_row = [wx_label, wx_value, wy_label, wy_value, wz_label, wz_value]
-        imu_time_row = [imu_time_label, imu_time_value, imu_sync_label, imu_sync_value]
-        mems_x_row = [ax_label, ax_value, wx_label, wx_value]
-        mems_y_row = [ay_label, ay_value, wy_label, wy_value]
-        mems_z_row = [az_label, az_value, wz_label, wz_value]
+        imu_col1 = sg.Column(alternating_color_table(
+            [[imu_time_label, imu_time_value],
+             [ax_label, ax_value],
+             [ay_label, ay_value],
+             [az_label, az_value],
+             [mag_x_label, mag_x_value],
+             [mag_y_label, mag_y_value],
+             [mag_z_label, mag_z_value],
+             [temp_label, temp_value]]))
 
-        mag_fog_row_x = [mag_x_label, mag_x_value, fog_x_label, fog_x_value]
-        mag_fog_row_y = [mag_y_label, mag_y_value, fog_y_label, fog_y_value]
-        mag_fog_row_z = [mag_z_label, mag_z_value, fog_z_label, fog_z_value]
-        temp_row = [temp_label, temp_value]
-        imu_tab_layout = [imu_time_row, mems_x_row, mems_y_row, mems_z_row, mag_fog_row_x, mag_fog_row_y, mag_fog_row_z,
-                          temp_row]
+        imu_col2 = sg.Column(alternating_color_table(
+            [[imu_sync_label, imu_sync_value],
+             [wx_label, wx_value],
+             [wy_label, wy_value],
+             [wz_label, wz_value],
+             [fog_x_label, fog_x_value],
+             [fog_y_label, fog_y_value],
+             [fog_z_label, fog_z_value]]))
 
+        imu_tab_layout = [[sg.vtop(imu_col1), sg.Push(), sg.vtop(imu_col2)]]
         imu_tab = sg.Tab(MONITOR_IMU_TAB_TITLE, imu_tab_layout, key="imu-tab")
 
         tab_group = sg.TabGroup([[imu_tab]])
@@ -555,26 +565,28 @@ class UserProgram:
                 #stop if on, start if off
                 if self.log_on.value:
                     self.stop_logging()
+                    log_button.update(image_filename=OFF_BUTTON_PATH)
                 else:
                     #start log with default name
                     logname = collector.default_log_name(self.serialnum)
                     self.log_name.value = logname.encode()
                     self.log_on.value = 1
                     self.log_start.value = 1
-                #update color
-                log_button.update(LOG_TEXT+TOGGLE_TEXT[self.log_on.value], button_color=TOGGLE_COLORS[self.log_on.value])
+                    log_button.update(image_filename=ON_BUTTON_PATH)
             elif event == "Configure": #resize, move. also triggers on button for some reason.
                 debug_print("size:")
                 debug_print(repr(window.size))
                 width, height = window.size
-                scale = min(width / base_width , height / base_height)
+                scale = min(width / base_width, height / base_height)
                 for item in value_font_elements:
-                    item.update(font=(FONT_NAME, int(VALUE_FONT_SIZE * scale)))
+                    fontname, fontsize, fontstyle = VALUE_FONT
+                    item.update(font=(fontname, int(fontsize * scale), fontstyle))
                 for item in label_font_elements:
-                    item.update(font=(FONT_NAME, int(LABEL_FONT_SIZE * scale)))
+                    fontname, fontsize, fontstyle = LABEL_FONT
+                    item.update(font=(fontname, int(fontsize * scale), fontstyle))
                 for item in buttons:
-                    item.font = (FONT_NAME, int(LABEL_FONT_SIZE * scale))
-                #zupt.update(font = (FONT_NAME, int(VALUE_FONT_SIZE * scale)))
+                    fontname, fontsize, fontstyle = LABEL_FONT
+                    item.font = (fontname, int(fontsize * scale), fontstyle)
 
             if hasattr(self.last_imu_msg, "raw"):
                 #print(f"has last_imu_msg: {self.last_imu_msg.raw}")
@@ -633,7 +645,7 @@ class UserProgram:
     def upgrade(self):
         print("\nFirmware upgrade process")
         print("\nNotes:")
-        print("\tGet the firmware file from Anello Photonics: IMU-A1_v<version number>.hex")
+        print("\tGet the firmware file from ANELLO Photonics: X3_v<version number>.hex")
         print("\tSoftware update is over USB only, not ethernet.")
         print("\tSupports Windows and Linux OS.")
 
@@ -649,7 +661,7 @@ class UserProgram:
         print("\nSelect the firmware file")
         hex_files_only_option = [("hex files", ".hex")]  # only allows picking .hex file.
         hex_file_path = pick_one_file(initialdir=None,
-                                      title="Select hex file to load: IMU-A1_<version>.hex",
+                                      title="Select hex file to load: X3_<version>.hex",
                                       filetypes=hex_files_only_option)
         if not hex_file_path: #on cancel, askopenfilename returns ""
             show_and_pause("\nfile not selected")
@@ -666,7 +678,7 @@ class UserProgram:
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()
-                show_and_pause("\nTry cycling power on unit and connect again. If it doesn't start up, contact Anello Photonics")
+                show_and_pause("\nTry cycling power on unit and connect again. If it doesn't start up, contact ANELLO Photonics")
                 return #should it try to connect here?
 
             show_and_pause(f"\n\nFinished updating")
@@ -823,6 +835,18 @@ def form_aln_string_prompt():
     heading_angle = cutie.get_number(prompt="heading adjustment (degrees): ", min_value=-360, max_value=360, allow_float=True)
     return f"{roll_angle:+.6f}{pitch_angle:+.6f}{heading_angle:+.6f}"
 
+def alternating_color_table(layout_grid):
+    new_layout = []
+    for i, row_list in enumerate(layout_grid):
+        row_frame = sg.Frame("", [row_list], border_width=0)
+        # alternating rows: recolor frame and contents background
+        if (i % 2) == 1:
+            row_frame.BackgroundColor = table_color_2
+            for elem in row_list:
+                if hasattr(elem, "BackgroundColor"):
+                    elem.BackgroundColor = table_color_2
+        new_layout.append([row_frame])
+    return new_layout
 
 #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
 def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
@@ -830,7 +854,7 @@ def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
                 log_on, log_start, log_stop, log_name,
                 ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                 ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+                last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_ahrs_msg,
                 last_imu_time,
                 serial_number
     ):
@@ -839,7 +863,7 @@ def runUserProg(exitflag, con_on, con_start, con_stop, con_succeed,
                        log_on, log_start, log_stop, log_name,
                        ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                        ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                       last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,
+                       last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,  # ignore AHRS for x3
                        last_imu_time,
                        serial_number
     )
@@ -886,6 +910,7 @@ if __name__ == "__main__":
     last_gp2_msg = Array('c', string_size)
     last_imu_msg = Array('c', string_size)
     last_hdg_msg = Array('c', string_size)
+    last_ahrs_msg = Array('c', string_size)
 
     last_imu_time = Value('d', 0)
 
@@ -895,7 +920,7 @@ if __name__ == "__main__":
                    con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                    log_on, log_start, log_stop, log_name,
                    ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed, ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
-                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg, last_imu_time,
+                   last_ins_msg, last_gps_msg, last_gp2_msg, last_imu_msg, last_hdg_msg,last_ahrs_msg, last_imu_time,
                    serial_number,               
     )
     io_process = Process(target=io_loop, args=shared_args)

@@ -13,12 +13,8 @@ READ_RAM = b'r'
 WRITE_FLASH = b'W'
 READ_FLASH = b'R'
 
-#codes for INI message
-HEADING_FLAG = b'hdg'
-INI_POSITION = b'pos'
-
 # output messages we recognize. these are actual msgtype in ASCII, converted from number in Binary and RTCM
-OUTPUT_MESSAGE_TYPES = [b'CAL', b'IMU', b'IM1', b'IMX', b'INS', b'GPS', b'GP2', b'HDG', b'MCA', b'MAG', b'SIPHOG']
+OUTPUT_MESSAGE_TYPES = [b'IMU', b'IM1', b'INS', b'GPS', b'GP2', b'HDG']
 
 FORMAT_IMU_NO_SYNC = [ #normal EVK, length 11
     ("imu_time_ms", float),
@@ -86,6 +82,7 @@ FORMAT_IMU_X3_NO_STATUS = [ #length 15, with 3 fogs, 3d magnetometer, sync time,
     ("temperature_c", float)
 ]
 
+
 FORMAT_IMU_X3_WITH_STATUS = [ #length 18, with 3 fogs, 3d magnetometer, 3 status bytes, sync time, no odometer.
     ("imu_time_ms", float),
     ("sync_time_ms", float),
@@ -114,7 +111,7 @@ SIPHOG_STATUS_BIT_POSITIONS = {
     "Siphog supply voltage bad": 3,
 }
 
-# older A1 firmware has fog volts, removed in v0.2.1
+#older A1 firmware has fog volts, removed in v0.2.1
 # FORMAT_IMU_WITH_FOG_VOLTS = [ #length 12
 #     ("imu_time_ms", float),
 #     ("accel_x_g", float),
@@ -142,6 +139,15 @@ FORMAT_IM1 = [ #for IMU or IMU+: no odo, has sync time. has FOG rate even if dis
     ("angrate_z_dps", float),
     ("fog_angrate_z_dps", float),
     ("temperature_c", float)
+]
+
+FORMAT_AHRS = [
+    ("imu_time_ms", float),
+    ("sync_time_ms", float),
+    ("roll_deg", float),
+    ("pitch_deg", float),
+    ("heading_deg", float),
+    ("zupt_flag", int),
 ]
 
 UNLOCK_FLASH_CODE = b'704E2590'
@@ -260,7 +266,7 @@ FORMAT_ODO = [
 FORMAT_INS = [
     ("imu_time_ms", float),
     ("gps_time_ns", int),
-    ("ins_solution_status_and_gps_used", int),
+    ("ins_solution_status_and_gps_used", int), #was heading_initialized
     ("lat_deg", float),
     ("lon_deg", float),
     ("alt_m", float),
@@ -341,6 +347,7 @@ VEH_FIELDS_MAIN = {
     "Baseline Calibration": "bcal",
     "Ticks per rev ": "tic",
     "Wheel radius  ": "rad",
+    # zupt calibration fields.
     "Zupt calibration    ": "zcal",
     "GPS accuracy floor (m)": "rmin",
 }

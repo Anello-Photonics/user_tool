@@ -8,6 +8,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
+# powers of 10 rane which will show without exponential notation
+EXP_CUTOFF_LOW = -4
+EXP_CUTOFF_HIGH = 4
+
 
 def column_of_type(frame, column_names, column_type):
     data_out, description_out = [], ""
@@ -39,6 +43,15 @@ def column_of_type(frame, column_names, column_type):
         differences = frame[var1] - frame[var2]
         data_out = differences
         description_out = f"{var1} minus {var2}"
+
+    elif column_type == "difference of column deltas":
+        print("this will plot delta(column 1) minus delta(column 2)")
+        print("\npick column 1")
+        var1 = column_names[cutie.select(column_names)]
+        print("\npick column 2")
+        var2 = column_names[cutie.select(column_names)]
+        data_out = frame[var1].diff() - frame[var2].diff()
+        description_out = f"deltas of {var1} minus deltas of {var2}"
 
     elif column_type == "ratio of two columns":
         print("this will plot column 1 divided by column 2")
@@ -78,7 +91,7 @@ if __name__ == "__main__":
     frame.reset_index(inplace=True)
     column_names = [name for name in frame.columns]
 
-    main_options = ["one column", "deltas of one column", "difference of two columns", "ratio of two columns", "exit"]
+    main_options = ["one column", "deltas of one column", "difference of two columns", "difference of column deltas", "ratio of two columns", "exit"]
 
     while True:
         print("\n_______pick variables to plot next_______")
@@ -99,6 +112,7 @@ if __name__ == "__main__":
         plt.minorticks_on()
         plt.grid(visible=True, which='major', axis='both')
         plt.plot(x_data, y_data, color='blue', marker='.', linestyle="None")
+        plt.ticklabel_format(axis='both', style='sci', scilimits=(EXP_CUTOFF_LOW, EXP_CUTOFF_HIGH))
         plt.show()
 
         # TODO - compute stats on the data too?

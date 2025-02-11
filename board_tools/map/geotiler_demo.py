@@ -61,7 +61,7 @@ def draw_map(lat, lon, zoom, map_size, arrow_size, heading_deg, arrow_image_path
 
     #put arrow on the map using PIL image methods
     arrow = PIL.Image.open(arrow_image_path).resize((arrow_size, arrow_size))
-    arrow_rotated = arrow.rotate(-1.0 * heading_deg) #heading and rotate function have opposite direction
+    arrow_rotated = arrow.rotate(-1.0 * heading_deg, expand=True, resample=Image.BICUBIC) #heading and rotate function have opposite direction
     arrow_width, arrow_height = arrow_rotated.width, arrow_rotated.height
     #print("arrow image dimensions: "+str((arrow_width, arrow_height)))
     x_offset, y_offset = arrow_width/2, arrow_height/2

@@ -121,8 +121,16 @@ class ReadableScheme(Scheme):
 
             #could split these from data or from message.checksum_input
             message.talker = data[0: READABLE_TALKER_LENGTH]
-            message.msgtype = data[READABLE_TALKER_LENGTH: READABLE_TALKER_LENGTH + READABLE_TYPE_LENGTH]
-            message.payload = data[READABLE_TALKER_LENGTH + READABLE_TYPE_LENGTH + len(READABLE_PAYLOAD_SEPARATOR): sep_index]
+
+            # messsage type is after "AP" until first comma (like APCFG,W... ) or * (like APPNG*48)
+            first_special_char = min(data.find(READABLE_PAYLOAD_SEPARATOR), sep_index)
+            if first_special_char < 0:
+                message.valid = False
+                message.error = "Parsing error: no character indicating end of message type"
+                return
+
+            message.msgtype = data[READABLE_TALKER_LENGTH: first_special_char]
+            message.payload = data[first_special_char + len(READABLE_PAYLOAD_SEPARATOR): sep_index]
             if self.check_valid(message):
                 self.decode_payload_for_type(message, message.msgtype, message.payload)
         except Exception as err:
@@ -185,6 +193,7 @@ class ReadableScheme(Scheme):
             b'SEN': self.set_payload_fields_with_names,
             b'INI': self.set_payload_fields_INI_UPD,
             b'UPD': self.set_payload_fields_INI_UPD,
+            b'AHRS': self.set_payload_field_AHRS,
         }
         decoderFunc = decoders.get(msgtype)
         if decoderFunc:
@@ -350,6 +359,9 @@ class ReadableScheme(Scheme):
 
     def set_payload_fields_ODO(self, message, payload):
         self.set_fields_from_list(message, FORMAT_ODO, payload)
+
+    def set_payload_field_AHRS(self, message, payload):
+        self.set_fields_from_list(message, FORMAT_AHRS, payload)
 
     #config message: mode is read or write
     #write has name, value pairs:   APCFG,w,odr,100,msg,IMU  is CFG with mode = write, odr = 10, msg = IMU

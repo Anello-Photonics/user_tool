@@ -1,6 +1,5 @@
 # X3 subclass of IMUBoard, to fix connecting and config reading on X3
 # handle mixed binary or ASCII output messaging with ASCII config messaging
-# System_Test_Infrastructure has x3_board class. todo - make it extend this class, and move over all non-Siphog methods.
 
 import sys
 from pathlib import Path
