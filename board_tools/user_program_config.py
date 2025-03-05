@@ -130,6 +130,9 @@ CFG_VALUE_OPTIONS = {
     "azupt": ['1', '0'],
 }
 
+# no RTCM format for X3. this is only used if setting X3 message format in user_program.py, should use x3_tool instead.
+message_formats_X3 = ["1", "0"]
+
 RS232_BAUDS = ["19200", "57600", "115200", "230400"]
 
 CFG_VALUE_NAMES = {

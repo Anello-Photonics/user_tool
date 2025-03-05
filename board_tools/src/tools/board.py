@@ -822,14 +822,6 @@ class IMUBoard:
         m = Message({'msgtype': b'VEH', 'mode': READ_FLASH, 'configurations': names_list})
         return self.send_control_message(m)
 
-    def get_sensor(self, names_list):
-        m = Message({'msgtype': b'SEN', 'mode': READ_FLASH, 'configurations': names_list})
-        return self.send_control_message(m)
-
-    def unlock_flash(self):
-        m = Message({'msgtype': b'UNL', 'password': UNLOCK_FLASH_CODE})
-        return self.send_control_message(m)
-
     def get_status(self):
         m = Message({'msgtype': b'STA'})
         return self.send_control_message(m)
@@ -1071,9 +1063,6 @@ class IMUBoard:
     def retry_get_veh_flash(self, names_list, as_dict=False):
         return self.retry_get_info_keywords(self.get_veh_flash, b'VEH', names_list, return_dict=as_dict)
 
-    def retry_get_sensor(self, names_list, as_dict=False):
-        return self.retry_get_info_keywords(self.get_sensor, b'SEN', names_list, return_dict=as_dict)
-
     # TODO - make a wrapper for single arg that unwraps it? like:  odr = retry_get_flash("odr") ?
     #ex: def_retry_get_cfg(self, single_name): return self.retry_get_cfg([single_name])[0]
 
@@ -1096,15 +1085,6 @@ class IMUBoard:
 
     def retry_set_veh_flash(self, configurations):
         return self.retry_set_keywords(self.set_veh_flash, b'VEH', configurations)
-
-    #PUBLIC-TODO : check if we need unlock to check sensor ranges. otherwise remove.
-
-    #lock/unlock flash: use getter method since it responds with "Locked" or "Unlocked". Returns True if success.
-    def retry_lock_flash(self):
-        return self.retry_get_info(self.lock_flash, b"UNL", "locked") == b'Locked' #return True/False
-
-    def retry_unlock_flash(self):
-        return self.retry_get_info(self.unlock_flash, b"UNL", "locked") == b'Unlocked' #return True/False
 
     # read baud configs in a way that works on old and new firmware.
     # before 1.3 release: "bau" config is baud for data and config ports

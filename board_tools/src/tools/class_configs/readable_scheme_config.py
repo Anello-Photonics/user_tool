@@ -7,7 +7,6 @@ READABLE_CHECKSUM_LENGTH = 2 #one calculated checksum byte, but represent as 2 a
 READABLE_PAYLOAD_SEPARATOR = b','
 OUR_TALKER = b'AP'
 
-#codes for CFG and FLA type
 WRITE_RAM = b'w'
 READ_RAM = b'r'
 WRITE_FLASH = b'W'
@@ -148,15 +147,6 @@ FORMAT_AHRS = [
     ("pitch_deg", float),
     ("heading_deg", float),
     ("zupt_flag", int),
-]
-
-UNLOCK_FLASH_CODE = b'704E2590'
-LOCK_FLASH_CODE = b'1'
-FLASH_UNLOCKED_VALUE = b'Unlocked'
-FLASH_LOCKED_VALUE = b'Locked'
-
-FORMAT_UNL = [
-    ('locked', bytes)
 ]
 
 FORMAT_VER = [

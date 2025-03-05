@@ -176,7 +176,6 @@ class ReadableScheme(Scheme):
             b'HDG': self.set_payload_fields_HDG,
             b'ERR': self.set_payload_fields_ERR,
             b'CFG': self.set_payload_fields_with_names,
-            b'UNL': self.set_payload_fields_UNL,
             b'VER': self.set_payload_fields_VER,
             b'SER': self.set_payload_fields_SER,
             b'PID': self.set_payload_fields_PID,
@@ -190,7 +189,6 @@ class ReadableScheme(Scheme):
             b'ODO': self.set_payload_fields_ODO,
             b'INS': self.set_payload_fields_INS,
             b'VEH': self.set_payload_fields_with_names,
-            b'SEN': self.set_payload_fields_with_names,
             b'INI': self.set_payload_fields_INI_UPD,
             b'UPD': self.set_payload_fields_INI_UPD,
             b'AHRS': self.set_payload_field_AHRS,
@@ -206,8 +204,6 @@ class ReadableScheme(Scheme):
         encoders = {
             b'CFG': self.build_payload_CFG,
             b'VEH': self.build_payload_CFG,
-            b'SEN': self.build_payload_CFG,
-            b'UNL': self.build_payload_UNL,
             b'VER': self.build_payload_no_fields,
             b'SER': self.build_payload_no_fields,
             b'PID': self.build_payload_no_fields,
@@ -324,9 +320,6 @@ class ReadableScheme(Scheme):
             configurations[cfg_name] = cfg_value
         message.configurations = configurations
 
-    def set_payload_fields_UNL(self, message, payload):
-        self.set_fields_from_list(message, FORMAT_UNL, payload)
-
     def set_payload_fields_VER(self, message, payload):
         self.set_fields_from_list(message, FORMAT_VER, payload)
     
@@ -379,10 +372,6 @@ class ReadableScheme(Scheme):
         else:
             raise Exception("unknown mode for CFG message")
         return data
-
-    # one password field - valid password to unlock, 1 to lock, read if none.
-    def build_payload_UNL(self, message):
-        return message.password
 
     #many messages have no fields, mostly if they are requests(requested resource is the message type)
     def build_payload_no_fields(self, message):

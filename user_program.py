@@ -483,18 +483,12 @@ class UserProgram:
                 if ('IMU' in self.product_id.upper()) or ('GNSS' in self.product_id.upper()):
                     value_options = RS232_BAUDS
 
-            # don't allow message format = binary if any sensor ranges are 0, or version below 1.2
+            # message formats: no binary below 1.2.0, no RTCM for X3
             if code == "mfm":
                 if "X3" in self.product_id.upper():
                     value_options = message_formats_X3
-                else:
-                    self.board.retry_unlock_flash()
-                    ranges = self.board.retry_get_sensor(["rr1", "rr2", "rr3", "ra1", "ra2", "ra3"])
-                    if ((ranges is None) or (b'0' in ranges)) and "0" in value_options:
-                        value_options.remove("0")
-
-                    if (not version_greater_or_equal(self.version, "1.2.0")) and "0" in value_options:
-                        value_options.remove("0")
+                elif (not version_greater_or_equal(self.version, "1.2.0")) and "0" in value_options:
+                    value_options.remove("0")
 
             value_option_names = [CFG_VALUE_NAMES.get((code, opt), opt) for opt in value_options]  # cfg and vale code -> value name
             value = value_options[cutie.select(value_option_names)]
