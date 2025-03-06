@@ -1,5 +1,6 @@
 # configs for x3_tool. import everything from user_program_config, but can also overwrite or add new configs here.
 from user_program_config import *
+from board_config import ALLOWED_BAUD_SORTED
 
 #__________Main user program configs__________:
 DEBUG = False
@@ -49,7 +50,7 @@ CFG_FIELD_EXAMPLES = {
 CFG_VALUE_OPTIONS = {
     "mfm": ["1", "0"], #1 = ASCII, 0 = Binary. No RTCM for X3.
     "odr": ["20", "50", "100", "200"],
-    "bau": ["19200", "57600", "115200", "230400", "460800", "921600"],
+    "bau":  [str(x) for x in ALLOWED_BAUD_SORTED],
     "sync": ["on", "off"],
 }
 

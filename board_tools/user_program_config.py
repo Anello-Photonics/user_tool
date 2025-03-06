@@ -8,6 +8,7 @@ parent_dir = str(pathlib.Path(__file__).parent)
 sys.path.append(parent_dir+'/src/tools/class_configs')
 from readable_scheme_config import INI_UPD_ERROR_CODES
 import os
+from board_config import ALLOWED_BAUD_SORTED
 
 def debug_print(text):
     if DEBUG:
@@ -110,8 +111,8 @@ CFG_VALUE_OPTIONS = {
     "orn": ["+X+Y+Z", "+Y+X-Z", "-X-Y+Z", "+Y-X+Z", "-Y+X+Z", "+X-Y-Z", "-X+Y-Z", "-Y-X-Z"],
     "mfm": ["1", "4", "0"], #1 = ASCII, 4 = RTCM. see CFG_VALUE_NAMES
     "odr": ["20", "50", "100", "200"],
-    "bau": ["19200", "57600", "115200", "230400", "460800", "921600"],
-    "bau_input": ["19200", "57600", "115200", "230400", "460800", "921600"],
+    "bau": [str(x) for x in ALLOWED_BAUD_SORTED],
+    "bau_input": [str(x) for x in ALLOWED_BAUD_SORTED],
     "gps1": ["on", "off"],
     "gps2": ["on", "off"],
     "odo": ["mps", "mph", "kph", "fps"],

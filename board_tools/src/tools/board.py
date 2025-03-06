@@ -656,7 +656,7 @@ class IMUBoard:
                         serial_con.close()
                         return None
                     if not set_config_port:
-                        valid_baud_rates = ALLOWED_BAUD  #[115200, 230400, 921600]
+                        valid_baud_rates = ALLOWED_BAUD_SORTED.copy()
                         print("\nselect baud rate")
                         baud = valid_baud_rates[cutie.select(valid_baud_rates, selected_index=0)]
                         data_con = SerialConnection(data_port, baud, timeout=TIMEOUT_REGULAR)
