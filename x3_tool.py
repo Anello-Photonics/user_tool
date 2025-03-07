@@ -31,7 +31,10 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.src.tools.x3_unit import X3_Unit
     from board_tools.log_config_x3 import log_board_config
     from user_program import default_log_name
-    from user_program_config import USE_GRAPHICS
+
+    USE_GRAPHICS = True
+    if '-h' in sys.argv or '--headless' in sys.argv:
+        USE_GRAPHICS = False
 
     if USE_GRAPHICS:
         import PySimpleGUI as sg
@@ -168,6 +171,8 @@ class UserProgram:
 
     def show_info(self):
         print(f"\nANELLO X3 Setup Tool, version {X3_TOOL_VERSION}, " + date_time())
+        if not USE_GRAPHICS:
+            print("headless mode: graphics are disabled")
         print("\nSystem Status:")
         self.show_device()
         self.show_connection()

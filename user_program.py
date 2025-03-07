@@ -38,6 +38,10 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.ioloop import *
     from board_tools.log_config import log_board_config
 
+    USE_GRAPHICS = True
+    if '-h' in sys.argv or '--headless' in sys.argv:
+        USE_GRAPHICS = False
+
     if USE_GRAPHICS:
         import PySimpleGUI as sg
         from board_tools.convertLog import export_logs_detect_format
@@ -205,6 +209,8 @@ class UserProgram:
 
     def show_info(self):
         print(f"\nANELLO Python Program, version {PROGRAM_VERSION}, " + date_time())
+        if not USE_GRAPHICS:
+            print("headless mode: graphics are disabled")
         print("\nSystem Status:")
         self.show_device()
         self.show_connection()

@@ -36,6 +36,10 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
 
     from user_program import UserProgram, clear_screen, show_and_pause, load_udp_settings, save_udp_settings, default_log_name
 
+    USE_GRAPHICS = True
+    if '-h' in sys.argv or '--headless' in sys.argv:
+        USE_GRAPHICS = False
+
     if USE_GRAPHICS:
         import PySimpleGUI as sg
         from board_tools.convertLog import export_logs_detect_format

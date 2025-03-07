@@ -1,6 +1,5 @@
 #__________Main user program configs__________:
 DEBUG = False
-USE_GRAPHICS = True
 import time
 
 import sys
