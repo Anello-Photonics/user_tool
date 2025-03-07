@@ -14,7 +14,6 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import base64
     import socket
     import select
-    import PySimpleGUI as sg
     import random
     import io
     import re
@@ -29,14 +28,19 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.src.tools import *
     from board_tools.configs_x3 import *
     from board_tools.ioloop import *
-    from board_tools.convertLog_x3 import export_logs_detect_format
     from board_tools.src.tools.x3_unit import X3_Unit
-    from board_tools.file_picking import pick_one_file, pick_multiple_files
     from board_tools.log_config_x3 import log_board_config
+    from user_program import default_log_name
+    from user_program_config import USE_GRAPHICS
 
-    LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
-    ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
-    OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
+    if USE_GRAPHICS:
+        import PySimpleGUI as sg
+        from board_tools.convertLog_x3 import export_logs_detect_format
+        from board_tools.file_picking import pick_one_file, pick_multiple_files
+        LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+        ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
+        OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
+
 
 X3_TOOL_VERSION = "1.0"
 
@@ -85,6 +89,10 @@ class UserProgram:
                 if self.board:
                     # is connected -> normal options
                     menu_options = MENU_OPTIONS_X3.copy()
+                    if not USE_GRAPHICS:
+                        menu_options.remove("Monitor")
+                        menu_options.remove("Firmware Update")
+
                 else:
                     # not connected: reduced options
                     menu_options = MENU_OPTIONS_WHEN_DISCONNECTED
@@ -377,7 +385,10 @@ class UserProgram:
     def log(self):
         clear_screen()
         self.show_logging()
-        actions = ["Export to CSV", "cancel"]
+        actions = ["cancel"]
+        # csv export needs graphics for file picker
+        if USE_GRAPHICS:
+            actions = ["Export to CSV"] + actions
         if self.log_on.value:
             actions = ["Stop"]+actions
         else:
@@ -404,7 +415,7 @@ class UserProgram:
             show_and_pause("must connect before logging")
             return
         else:
-            suggested = collector.default_log_name(self.serialnum)
+            suggested = default_log_name(self.serialnum)
             options = ["default: " + suggested, "other"]
             print("\nFile name:")
             selected_option = cutie.select(options)
@@ -422,6 +433,11 @@ class UserProgram:
         self.log_stop.value = 1 #send stop signal to other thread which will close the log
 
     def monitor(self):
+
+        if not USE_GRAPHICS:
+            show_and_pause("\nno monitor when USE_GRAPHICS flag is false")
+            return
+
         if not self.board:
             show_and_pause("connect before monitoring")
             return
@@ -568,7 +584,7 @@ class UserProgram:
                     log_button.update(image_filename=OFF_BUTTON_PATH)
                 else:
                     #start log with default name
-                    logname = collector.default_log_name(self.serialnum)
+                    logname = default_log_name(self.serialnum)
                     self.log_name.value = logname.encode()
                     self.log_on.value = 1
                     self.log_start.value = 1

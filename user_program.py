@@ -14,7 +14,6 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import base64
     import socket
     import select
-    import PySimpleGUI as sg
     import random
     import io
     import re
@@ -37,16 +36,18 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.user_program_config import *
     from board_tools.version_num import PROGRAM_VERSION
     from board_tools.ioloop import *
-    from board_tools.convertLog import export_logs_detect_format
-    from board_tools.map.geotiler_demo import draw_map, draw_dial
-    from board_tools.file_picking import pick_one_file, pick_multiple_files
     from board_tools.log_config import log_board_config
 
-    LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
-    ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
-    OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
-    DEFAULT_MAP_IMG_PATH = os.path.join(MAP_DIR, DEFAULT_MAP_IMAGE)
-    ARROW_FILE_PATH = os.path.join(MAP_DIR, ARROW_FILE_NAME)
+    if USE_GRAPHICS:
+        import PySimpleGUI as sg
+        from board_tools.convertLog import export_logs_detect_format
+        from board_tools.map.geotiler_demo import draw_map, draw_dial
+        from board_tools.file_picking import pick_one_file, pick_multiple_files
+        LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+        ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
+        OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
+        DEFAULT_MAP_IMG_PATH = os.path.join(MAP_DIR, DEFAULT_MAP_IMAGE)
+        ARROW_FILE_PATH = os.path.join(MAP_DIR, ARROW_FILE_NAME)
 
 #interface for A1 configuration and logging
 class UserProgram:
@@ -115,6 +116,11 @@ class UserProgram:
                             menu_options.remove("Send Inputs")  # for position/heading messages: not needed without GPS
                         except ValueError:
                             pass
+
+                    if not USE_GRAPHICS:
+                        menu_options.remove("Monitor")
+                        menu_options.remove("Firmware Update")
+
                 else:
                     # not connected: reduced options
                     menu_options = MENU_OPTIONS_WHEN_DISCONNECTED
@@ -722,7 +728,10 @@ class UserProgram:
     def log(self):
         clear_screen()
         self.show_logging()
-        actions = ["Export to CSV", "cancel"]
+        actions = ["cancel"]
+        # csv export needs graphics for file picker
+        if USE_GRAPHICS:
+            actions = ["Export to CSV"] + actions
         if self.log_on.value:
             actions = ["Stop"]+actions
         else:
@@ -749,7 +758,7 @@ class UserProgram:
             show_and_pause("must connect before logging")
             return
         else:
-            suggested = collector.default_log_name(self.serialnum)
+            suggested = default_log_name(self.serialnum)
             options = ["default: " + suggested, "other"]
             print("\nFile name:")
             selected_option = cutie.select(options)
@@ -866,6 +875,11 @@ class UserProgram:
         self.ntrip_stop.value = 1
 
     def monitor(self):
+
+        if not USE_GRAPHICS:
+            show_and_pause("\nno monitor when USE_GRAPHICS flag is false")
+            return
+
         if not self.board:
             show_and_pause("connect before monitoring")
             return
@@ -1406,7 +1420,7 @@ class UserProgram:
                     log_button.update(image_filename=OFF_BUTTON_PATH)
                 else:
                     #start log with default name
-                    logname = collector.default_log_name(self.serialnum)
+                    logname = default_log_name(self.serialnum)
                     self.log_name.value = logname.encode()
                     self.log_on.value = 1
                     self.log_start.value = 1
@@ -1905,6 +1919,18 @@ def clear_screen(): #UserProgram
         else:
             # the only other os.name is 'java' - not sure what OS has that.
             pass
+
+
+def default_log_name(serialNum=None):
+    local = time.localtime()
+    date_nums = [local.tm_year, local.tm_mon, local.tm_mday]
+    time_nums = [local.tm_hour, local.tm_min, local.tm_sec]
+    date_str = "date_" + "_".join([str(num).zfill(2) for num in date_nums])
+    time_str = "time_" + "_".join([str(num).zfill(2) for num in time_nums])
+    if serialNum is None:
+        return "output_" + date_str + "_" + time_str + LOG_FILETYPE
+    else:
+        return "output_" + date_str + "_" + time_str + "_SN_"+str(serialNum) + LOG_FILETYPE
 
 
 # one string of the date and time

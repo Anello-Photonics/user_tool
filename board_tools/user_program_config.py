@@ -1,5 +1,6 @@
 #__________Main user program configs__________:
 DEBUG = False
+USE_GRAPHICS = True
 import time
 
 import sys
@@ -9,6 +10,7 @@ sys.path.append(parent_dir+'/src/tools/class_configs')
 from readable_scheme_config import INI_UPD_ERROR_CODES
 import os
 from board_config import ALLOWED_BAUD_SORTED
+LOG_FILETYPE = ".txt"
 
 def debug_print(text):
     if DEBUG:
