@@ -844,6 +844,27 @@ class IMUBoard:
     def enter_bootloading(self):
         self.send_reset(2)
 
+    # enter bootloading, verify no ping response, retry up to a limit.
+    def retry_enter_bootloading(self):
+        for i in range(5):
+            self.enter_bootloading()
+            time.sleep(0.1)
+            if self.ping() is None:
+                return True
+        return False
+
+    # alternate version which checks if data output stops along with ping
+    # currently user_program releases data port first, so can't use this version yet.
+    def retry_enter_bootloading_with_data_port(self):
+        for i in range(5):
+            self.enter_bootloading()
+            self.clear_data_port()
+            time.sleep(0.1)
+            remaining = self.data_connection.readall()
+            if (self.ping() is None) and len(remaining) == 0:
+                return True
+        return False
+
     # makes lookup tables from flash apply to ram without restarting the unit.
     # unlike rst 0 and 2, this doesn't restart the unit, so it gets a response.
     # TODO - this is added in X3 0.0.27 firmware. Move into X3_Board class, or will other products have it too?
@@ -1197,12 +1218,14 @@ class IMUBoard:
     def bootload_with_file_path(self, bootloader_path, hex_file_path, expected_version_after="unknown", num_attempts=1):
         if bootloader_path is None:
             return
-        print(f"\nBootloading with {bootloader_path}")
+        print(f"\nUpdating firmware with {bootloader_path}")
+        print("\nKeep plugged in until update finishes.")
+        print("If update fails: cycle power, then connect user_program again to check firmware version.")
 
-        print("\nKeep plugged in until upgrade finishes.")
-        print("If bootload fails: cycle power, then connect user_program again to check firmware version.")
+        if not self.retry_enter_bootloading():
+            show_and_pause("\nCould not enter update mode: please check cable connections and try again")
+            return
 
-        self.enter_bootloading()
         self.release_connections()
         # send bootloader commands. TODO - should it use subprocess.call() instead of os.system()?
         port_prefix, port_number = split_port_name(self.data_port_name)
