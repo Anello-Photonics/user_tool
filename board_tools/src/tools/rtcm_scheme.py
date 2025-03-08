@@ -26,7 +26,11 @@ class RTCM_Scheme(Scheme):
         try:
             stream = RTCMReader(connection)
             message = Message()
-            self.set_fields_general(message, stream.read()[0])
+            read_data = stream.read()[0]
+            # if no data, or RTCM3 CRC fail, this is None.
+            if not read_data:
+                return None
+            self.set_fields_general(message, read_data)
         except:
             # TODO be more specific about exception
             pass
