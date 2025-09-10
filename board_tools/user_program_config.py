@@ -26,6 +26,7 @@ MENU_OPTIONS = [
     "Monitor",
     "NTRIP",
     "Send Inputs",
+    "Send Custom Message",
     "Save Configs",
     "Firmware Update",
     #"Plot", # put this back in menu when implemented

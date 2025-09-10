@@ -726,6 +726,30 @@ class UserProgram:
         else:
             show_and_pause(f"\nunexpected response type {msg_type}")
 
+    def send_custom_message(self):
+        in_text = input("enter message: ").encode()
+        full_messsage = self.board.form_custom_message(in_text)
+        print(f"\nsending message: {full_messsage}")
+        self.board.control_connection.write(full_messsage)
+        time.sleep(1e-1)
+        resp = self.board.control_connection.readall()  # get response ans raw data, don't try to parse
+        if resp:
+            print(f"\nresponse: {resp}")
+        else:
+            print(f"\nno response")
+
+    def send_custom_message_menu(self):
+        clear_screen()
+        print("______ Send Custom Messages ______")
+        options = ["Send", "Done"]
+        while True:
+            print("\nsend message?")
+            chosen = options[cutie.select(options)]
+            if chosen == "Done":
+                return
+            else:
+                self.send_custom_message()
+
     # logging mode:
     # prompt for file name with default suggestion
     # stay in logging mode with indicator of # messages logged updated once/sec
