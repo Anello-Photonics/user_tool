@@ -86,8 +86,7 @@ class X3_Unit(IMUBoard):
                     self.control_port_name = control_port
                     self.control_baud = control_baud
 
-                    # for other products we read data baud here:  data_baud = self.get_data_baud_flash()
-                    #  but x3 has same baud on both ports. add that back if we allow separate bauds.
+                    # Current X3 firmware uses one shared BAU setting for both user UART ports.
                     data_baud = control_baud
                     self.data_baud = data_baud
 
@@ -95,7 +94,8 @@ class X3_Unit(IMUBoard):
                     if set_data_port:
                         data_port = self.find_data_port_gnss_imu() #this finds and connects, don't need to set self.data_connection
                         if data_port is None: #fail on data port not found
-                            return None
+                            self.release_connections()
+                            continue
                         self.data_port_name = data_port
                     return control_port, data_port, control_baud, data_baud
                 else:
