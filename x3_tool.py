@@ -46,6 +46,7 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
 
 
 X3_TOOL_VERSION = "1.0"
+IO_CONNECT_TIMEOUT_S = 8.0
 
 #interface for X3 configuration and logging
 class UserProgram:
@@ -81,6 +82,18 @@ class UserProgram:
 
         #any features which might or not be there - do based on firmware version?
         self.available_configs = []
+
+    # wait for io loop to report data-port connect outcome
+    # returns True on success, False on fail, None on timeout
+    def wait_for_ioloop_connect(self, timeout_s=IO_CONNECT_TIMEOUT_S):
+        deadline = time.time() + timeout_s
+        while self.con_succeed.value == 0:
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.1)
+        data_success = (self.con_succeed.value == 1)  # 0 waiting, 1 succeed, 2 fail
+        self.con_succeed.value = 0
+        return data_success
 
     def mainloop(self):
         while True:
@@ -230,13 +243,13 @@ class UserProgram:
 
             #check success from ioloop. TODO - maybe check new_connection here - will be None for cancel, then dont wait
             debug_print("wait for connect success")
-            while self.con_succeed.value == 0:
-                time.sleep(0.1)
-                # should it time out eventually?
+            data_success = self.wait_for_ioloop_connect()
             debug_print("done waiting")
-            data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
+            if data_success is None:
+                self.release()
+                show_and_pause("timed out waiting for data port connection from io thread. Try reconnecting.")
+                continue
             debug_print("data success: "+str(data_success)+", control success: "+str(control_success))
-            self.con_succeed.value = 0
             if data_success and control_success:
                 return
             else:
@@ -270,6 +283,7 @@ class UserProgram:
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
             board.release_connections()
+            self.board = None
             show_and_pause("\nfailed to read product info. Check connection settings and try again.")
             return None
 
@@ -277,6 +291,7 @@ class UserProgram:
         self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
         self.con_type.value = b"COM"
         self.con_on.value = 1
+        self.con_succeed.value = 0
         self.con_start.value = 1
         return {"type": "COM", "control port": board.control_port_name, "data port": data_port_name}
 
@@ -717,16 +732,31 @@ class UserProgram:
         # serial connection needs to use new bauds if they changed.
         new_control_baud = self.board.get_control_baud_flash()
         new_data_baud = self.board.get_data_baud_flash()
+        if new_control_baud is None:
+            new_control_baud = self.board.control_baud
+        if new_data_baud is None:
+            # X3 uses shared BAU in current firmware; fall back safely if read fails.
+            new_data_baud = new_control_baud if new_control_baud is not None else self.board.data_baud
+        if new_control_baud is None or new_data_baud is None:
+            show_and_pause("could not read baud settings after reset. reconnect manually.")
+            return
         print("\nrestarting")
         self.board.reset_with_waits(new_control_baud, new_data_baud)
 
         # tell ioloop to use the new data port baud
         self.data_port_baud.value = new_data_baud
-        self.con_start.value = 1
-        while self.con_succeed.value == 0:
-            time.sleep(0.1)
-        data_success = (self.con_succeed.value == 1)  # 0 waiting, 1 succeed, 2 fail
+        self.control_port_baud.value = new_control_baud
         self.con_succeed.value = 0
+        self.con_start.value = 1
+        data_success = self.wait_for_ioloop_connect()
+        if data_success is None:
+            self.release()
+            show_and_pause("timed out waiting for data reconnect after reset. Try reconnecting.")
+            return
+        if not data_success:
+            self.release()
+            show_and_pause("data reconnect failed after reset. Try reconnecting.")
+            return
 
     def plot(self):
         show_and_pause("Not implemented yet")
@@ -744,7 +774,7 @@ class UserProgram:
                 if not output_msg:
                     continue
                 # connection errors: retry. content errors like invalid fields/values don't retry
-                if output_msg.msgtype == b'ERR' and output_msg.msgtype in connection_errors:
+                if output_msg.msgtype == b'ERR' and hasattr(output_msg, "err") and output_msg.err in connection_errors:
                     continue
                 # invalid response message or unexpected response type: retry
                 if not proper_response(output_msg, response_types):

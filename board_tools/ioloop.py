@@ -241,12 +241,15 @@ def io_loop(exitflag, con_on, con_start, con_stop, con_succeed,
                 elif con_type.value == b"UDP":
                     debug_print("io_loop connect UDP")
                     data_connection = UDPConnection(udp_ip.value.decode(), UDP_LOCAL_DATA_PORT, udp_port.value)
+                else:
+                    raise ValueError(f"unsupported connection type: {con_type.value!r}")
                 con_succeed.value = 1 # success
             except Exception as e:
                 debug_print(str(type(e))+": "+str(e))
                 con_succeed.value = 2  # fail
                 if data_connection:
                     data_connection.close()
+                    data_connection = None
         elif log_start.value:
             debug_print("io_loop log start")
             log_file = open_log_file(log_path(), log_name.value.decode())
