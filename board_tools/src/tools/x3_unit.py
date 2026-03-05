@@ -47,27 +47,26 @@ class X3_Unit(IMUBoard):
             return None
 
     # indicate if it's proper config port.
-    # accept ping response of 2 (X3 config port) or 0 (old X3, other products), but not 1 (X3 data port)
+    # current X3 firmware returns APPNG,2 for config port.
     def check_control_port(self):
-        for _ in range(3):
+        for _ in range(8):
             code = self.parse_png_code(self.ping())
             if code is None:
                 continue
-            return code != 1
+            return code == 2
         return False
 
-    # ping data port instead.  accept 1 (X3 data port) or 0 (old X3, other products) but not 2 (config port)
-    # todo: should it handle old X3 firmware which has no config messaging on data port? then read output messaging.
+    # ping data port instead.
+    # current X3 firmware returns APPNG,1 for data port.
     def check_data_port(self):
         m = Message({'msgtype': b'PNG'})
-        for _ in range(3):
+        for _ in range(8):
             response = self.send_control_message(m, self.data_connection)
             code = self.parse_png_code(response)
             if code is None:
                 continue
-            return code != 2
-        # fallback for firmware/builds where config messaging on the data port is unreliable
-        return super().check_data_port()
+            return code == 1
+        return False
 
     # allow sending config messages on either port for X3. default to designated "control port"
     def send_control_message(self, message, connection=None):
@@ -76,13 +75,10 @@ class X3_Unit(IMUBoard):
 
         # clear and then write to whichever connection.
         # data port can have much more backlog at low baud, so clear with a longer latency window there.
-        clear_wait_s = DEFAULT_PORT_LATENCY_S
-        if connection is getattr(self, "data_connection", None):
-            clear_wait_s = MAX_PORT_LATENCY_S * 2
+        clear_wait_s = MAX_PORT_LATENCY_S * 2
         self.clear_connection(connection, self.control_scheme, clear_wait_s)
         self.control_scheme.write_one_message(message, connection)
-        if connection is getattr(self, "data_connection", None):
-            time.sleep(1e-2)
+        time.sleep(1e-2)
         resp = self.read_one_control_message(connection)
         if resp:
             return resp
