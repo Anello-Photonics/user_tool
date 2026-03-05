@@ -2,18 +2,19 @@
 # handle mixed binary or ASCII output messaging with ASCII config messaging
 
 import sys
+import time
 from pathlib import Path
 ABS_PATH = Path(__file__)
 sys.path.append(str(ABS_PATH.parent.parent.parent.parent))
 
 try:
-    from board import IMUBoard, DEFAULT_PORT_LATENCY_S
+    from board import IMUBoard, DEFAULT_PORT_LATENCY_S, MAX_PORT_LATENCY_S
     from binary_and_ascii_scheme import Binary_and_ASCII_Scheme
     from message_scheme import Message
     from readable_scheme import OUTPUT_MESSAGE_TYPES
     from connection import *
 except ModuleNotFoundError:
-    from tools.board import IMUBoard, DEFAULT_PORT_LATENCY_S
+    from tools.board import IMUBoard, DEFAULT_PORT_LATENCY_S, MAX_PORT_LATENCY_S
     from tools.binary_and_ascii_scheme import Binary_and_ASCII_Scheme
     from tools.message_scheme import Message
     from tools.readable_scheme import OUTPUT_MESSAGE_TYPES
@@ -29,29 +30,59 @@ class X3_Unit(IMUBoard):
         super().__init__(data_port=data_port, control_port=control_port, baud=baud, data_baud=data_baud,
                          data_scheme=data_scheme, control_scheme=control_scheme, try_manual=try_manual, timeout=timeout)
 
+    @staticmethod
+    def parse_png_code(response):
+        if not response or not response.valid or getattr(response, "msgtype", None) != b'PNG':
+            return None
+        code = getattr(response, "code", None)
+        if code is None:
+            return None
+        try:
+            if isinstance(code, bytes):
+                code = code.decode(errors="ignore").strip()
+            if isinstance(code, str):
+                code = code.strip()
+            return int(code)
+        except Exception:
+            return None
+
     # indicate if it's proper config port.
     # accept ping response of 2 (X3 config port) or 0 (old X3, other products), but not 1 (X3 data port)
     def check_control_port(self):
-        response = self.ping()
-        return response and response.valid and response.msgtype == b'PNG' and response.code != 1
+        for _ in range(3):
+            code = self.parse_png_code(self.ping())
+            if code is None:
+                continue
+            return code != 1
+        return False
 
     # ping data port instead.  accept 1 (X3 data port) or 0 (old X3, other products) but not 2 (config port)
     # todo: should it handle old X3 firmware which has no config messaging on data port? then read output messaging.
     def check_data_port(self):
         m = Message({'msgtype': b'PNG'})
-        response = self.send_control_message(m, self.data_connection)
-        return response and response.valid and response.msgtype == b'PNG' and response.code != 2
+        for _ in range(3):
+            response = self.send_control_message(m, self.data_connection)
+            code = self.parse_png_code(response)
+            if code is None:
+                continue
+            return code != 2
+        # fallback for firmware/builds where config messaging on the data port is unreliable
+        return super().check_data_port()
 
     # allow sending config messages on either port for X3. default to designated "control port"
     def send_control_message(self, message, connection=None):
         if connection is None:
             connection = self.control_connection
 
-        # clear and then write to whichever connection, using the faster latency used for control port.
-        # assume same control and data schemes? otherwise have to pass scheme argument too.
-        self.clear_connection(connection, self.control_scheme, DEFAULT_PORT_LATENCY_S)
+        # clear and then write to whichever connection.
+        # data port can have much more backlog at low baud, so clear with a longer latency window there.
+        clear_wait_s = DEFAULT_PORT_LATENCY_S
+        if connection is getattr(self, "data_connection", None):
+            clear_wait_s = MAX_PORT_LATENCY_S * 2
+        self.clear_connection(connection, self.control_scheme, clear_wait_s)
         self.control_scheme.write_one_message(message, connection)
-        # time.sleep(1e-1)  # wait for response, seems to need it if UDPConnection has timeout 0.
+        if connection is getattr(self, "data_connection", None):
+            time.sleep(1e-2)
         resp = self.read_one_control_message(connection)
         if resp:
             return resp
