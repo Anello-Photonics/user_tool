@@ -98,15 +98,25 @@ class UserProgram:
         return data_success
 
     # conservative guard for low baud operation so output stream remains parseable.
-    # with current X3 message payload sizes, 115200 at 200 Hz can overflow effective UART throughput.
+    # target mapping:
+    # 57600->57 Hz, 115200->113 Hz, 230400/460800/921600->200 Hz.
     def validate_baud_odr_combo(self, configs_dict):
         try:
             baud = int(configs_dict.get("bau", "460800"))
             odr = int(configs_dict.get("odr", "200"))
         except Exception:
             return True, None
-        if baud <= 115200 and odr > 20:
-            return False, 20
+        if baud >= 230400:
+            max_odr = 200
+        elif baud >= 115200:
+            max_odr = 113
+        elif baud >= 57600:
+            max_odr = 57
+        else:
+            max_odr = 20
+
+        if odr > max_odr:
+            return False, max_odr
         return True, None
 
     def enforce_baud_odr_guard(self, new_configs):
@@ -121,15 +131,23 @@ class UserProgram:
         if valid:
             return new_configs
 
+        supported_odr = sorted([int(x) for x in CFG_VALUE_OPTIONS.get("odr", ["20", "50", "100", "200"])])
+        safe_odr = None
+        for option in supported_odr:
+            if option <= max_odr:
+                safe_odr = option
+        if safe_odr is None:
+            safe_odr = supported_odr[0]
+
         print(f"\nWarning: baud={combined.get('bau')} with odr={combined.get('odr')} can exceed link capacity.")
         options = [
-            f"Auto-adjust ODR to {max_odr} (recommended)",
+            f"Auto-adjust ODR to {safe_odr} (recommended, max {max_odr})",
             "Write anyway",
             "cancel",
         ]
         selected = options[cutie.select(options)]
         if selected == options[0]:
-            new_configs["odr"] = str(max_odr).encode()
+            new_configs["odr"] = str(safe_odr).encode()
             return new_configs
         if selected == options[1]:
             return new_configs
