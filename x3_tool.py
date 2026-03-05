@@ -68,6 +68,8 @@ class UserProgram:
         self.shared_serial_number.value = b""
         self.version = ""
         self.product_id = ""
+        self.current_configs = {}
+        self.recovery_mode = False
 
         #keep the shared vars as class attributes so other UserProgram methods have them.
         #set them like self.log_name.value = x so change is shared. not self.log_name = x
@@ -94,6 +96,89 @@ class UserProgram:
         data_success = (self.con_succeed.value == 1)  # 0 waiting, 1 succeed, 2 fail
         self.con_succeed.value = 0
         return data_success
+
+    # conservative guard for low baud operation so output stream remains parseable.
+    # with current X3 message payload sizes, 115200 at 200 Hz can overflow effective UART throughput.
+    def validate_baud_odr_combo(self, configs_dict):
+        try:
+            baud = int(configs_dict.get("bau", "460800"))
+            odr = int(configs_dict.get("odr", "200"))
+        except Exception:
+            return True, None
+        if baud <= 115200 and odr > 20:
+            return False, 20
+        return True, None
+
+    def enforce_baud_odr_guard(self, new_configs):
+        combined = dict(self.current_configs)
+        for key, value in new_configs.items():
+            if isinstance(value, bytes):
+                combined[key] = value.decode(errors="ignore")
+            else:
+                combined[key] = str(value)
+
+        valid, max_odr = self.validate_baud_odr_combo(combined)
+        if valid:
+            return new_configs
+
+        print(f"\nWarning: baud={combined.get('bau')} with odr={combined.get('odr')} can exceed link capacity.")
+        options = [
+            f"Auto-adjust ODR to {max_odr} (recommended)",
+            "Write anyway",
+            "cancel",
+        ]
+        selected = options[cutie.select(options)]
+        if selected == options[0]:
+            new_configs["odr"] = str(max_odr).encode()
+            return new_configs
+        if selected == options[1]:
+            return new_configs
+        return None
+
+    def manual_recovery_connect(self):
+        probe = X3_Unit(try_manual=False)
+        port_names = probe.list_ports()
+        probe.release_connections()
+        if not port_names:
+            show_and_pause("no ports found.")
+            return None
+
+        options = port_names + ["cancel"]
+        print("\nselect configuration port")
+        control_port = options[cutie.select(options, selected_index=0)]
+        if control_port == "cancel":
+            return None
+
+        print("\nselect data port (optional for recovery)")
+        data_options = port_names + ["none", "cancel"]
+        data_port = data_options[cutie.select(data_options, selected_index=0)]
+        if data_port == "cancel":
+            return None
+        if data_port == control_port:
+            data_port = "none"
+
+        baud_options = [int(x) for x in CFG_VALUE_OPTIONS.get("bau", [460800])]
+        print("\nselect baud rate")
+        selected_baud = baud_options[cutie.select(baud_options, selected_index=0)]
+
+        board = X3_Unit(try_manual=False)
+        try:
+            board.control_connection = SerialConnection(control_port, selected_baud, timeout=TIMEOUT_REGULAR)
+            board.control_port_name = control_port
+            board.control_baud = selected_baud
+            board.data_baud = selected_baud
+
+            if data_port == "none":
+                board.data_connection = DummyConnection()
+                board.data_port_name = "N/A"
+            else:
+                board.data_connection = SerialConnection(data_port, selected_baud, timeout=TIMEOUT_REGULAR)
+                board.data_port_name = data_port
+            return board
+        except Exception as e:
+            board.release_connections()
+            show_and_pause("manual recovery connect failed. check ports/baud and try again.")
+            return None
 
     def mainloop(self):
         while True:
@@ -154,6 +239,7 @@ class UserProgram:
         self.stop_logging()
         #close_ntrip(self.ntrip_on, self.ntrip_reader)
         self.connection_info = None
+        self.recovery_mode = False
         if self.board:
             self.board.release_connections()  # must release or reconnecting to the same ports will error
             self.board = None
@@ -230,8 +316,15 @@ class UserProgram:
                     return  # canceled in the auto/manual/cancel menu
                 elif result:
                     new_connection = result
-                    self.connection_info = new_connection
+                    skip_data_wait = bool(new_connection.get("skip_data_wait", False))
+                    self.connection_info = {
+                        "type": new_connection["type"],
+                        "control port": new_connection["control port"],
+                        "data port": new_connection["data port"],
+                    }
                     control_success = True
+                    if skip_data_wait:
+                        return
                 else:  # connect_com failed: returns None
                     continue
 
@@ -259,8 +352,11 @@ class UserProgram:
 
     def connect_com(self):
         print("\nConnect by COM port:")
-        options = ["Auto", "Manual", "cancel"]
+        self.recovery_mode = False
+        options = ["Auto", "Manual", "Manual Recovery (write-only)", "cancel"]
         selected = options[cutie.select(options)]
+        start_data_io = True
+        recovery_connect = False
         if selected == "Auto":
             self.release()
             board = X3_Unit.auto(set_data_port=True)
@@ -273,27 +369,61 @@ class UserProgram:
             manual_result = board.connect_manually(set_data_port=True)
             if manual_result is None:
                 return None
+        elif selected == "Manual Recovery (write-only)":
+            self.release()
+            board = self.manual_recovery_connect()
+            if board is None:
+                return None
+            start_data_io = False
+            recovery_connect = True
         else:  # cancel
             return "cancel"
 
         self.board = board
         data_port_name = board.data_port_name
-        board.data_connection.close()
+        if start_data_io and hasattr(board, "data_connection"):
+            board.data_connection.close()
 
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
-            board.release_connections()
-            self.board = None
-            show_and_pause("\nfailed to read product info. Check connection settings and try again.")
-            return None
+            if recovery_connect:
+                self.recovery_mode = True
+                self.serialnum = "unknown"
+                self.version = "unknown"
+                self.product_id = "x3"
+                self.shared_serial_number.value = b""
+                show_and_pause(
+                    "\nConnected in recovery mode.\n"
+                    "Reads may fail at this baud/ODR. Use Unit Configuration to lower ODR or raise baud, then restart."
+                )
+            else:
+                board.release_connections()
+                self.board = None
+                show_and_pause("\nfailed to read product info. Check connection settings and try again.")
+                return None
+        else:
+            self.recovery_mode = False
+
+        if data_port_name is None:
+            data_port_name = "N/A"
 
         # let io_thread do the data connection - give it the signal, close this copy
-        self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
+        shared_port = data_port_name if data_port_name != "N/A" else board.control_port_name
+        self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = shared_port.encode(), board.data_baud, board.control_baud
         self.con_type.value = b"COM"
-        self.con_on.value = 1
-        self.con_succeed.value = 0
-        self.con_start.value = 1
-        return {"type": "COM", "control port": board.control_port_name, "data port": data_port_name}
+        if start_data_io:
+            self.con_on.value = 1
+            self.con_succeed.value = 0
+            self.con_start.value = 1
+        else:
+            self.con_on.value = 0
+            self.con_stop.value = 1
+        return {
+            "type": "COM",
+            "control port": board.control_port_name,
+            "data port": data_port_name,
+            "skip_data_wait": (not start_data_io),
+        }
 
     def product_info_on_connect(self, board):
         combinations = (
@@ -317,9 +447,15 @@ class UserProgram:
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
+            print("Could not read all configs.")
+            options = ["Recovery edit (write-only)", "Back"]
+            if options[cutie.select(options)] == "Recovery edit (write-only)":
+                self.recovery_mode = True
+                self.available_configs = ["bau", "odr", "mfm", "sync"]
+                self.set_cfg()
             return #false means read failed -> go back to menu
         #check connection again since error can be caught in read_all_configs
-        if not self.con_on.value:
+        if not self.con_on.value and not self.recovery_mode:
             return
         #print("configure:")
         actions = ["Edit", "Done"]
@@ -361,15 +497,41 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
+        guarded_args = self.enforce_baud_odr_guard(dict(args))
+        if guarded_args is None:
+            return
+        args = guarded_args
+
+        # recovery mode: send write without waiting for response, so user can recover from overloaded streams.
+        if self.recovery_mode:
+            self.board.set_cfg_flash_no_wait(args)
+            for key, val in args.items():
+                self.current_configs[key] = val.decode(errors="ignore")
+            if "bau" in args:
+                try:
+                    new_baud = int(args["bau"].decode())
+                    self.board.control_baud = new_baud
+                    self.board.data_baud = new_baud
+                    self.control_port_baud.value = new_baud
+                    self.data_port_baud.value = new_baud
+                except Exception:
+                    pass
+            show_and_pause("\nSent config write in recovery mode. Restart unit and reconnect.")
+            return
+
         resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
         if not proper_response(resp, b'CFG'):
             show_and_pause("") # proper_response already shows error, just pause to see it.
+            return
+        for key, val in args.items():
+            self.current_configs[key] = val.decode(errors="ignore")
 
     # read and show all user configurations
     def read_all_configs(self, board):
         resp = self.retry_command(method=board.get_cfg_flash, args=[[]], response_types=[b'CFG'])
         if proper_response(resp, b'CFG'):
             configs_dict = resp.configurations
+            self.current_configs = {k: v.decode(errors="ignore") for k, v in configs_dict.items()}
 
             #TODO - print the configs in order of CFG_CODES_TO_NAMES,
             # and put available_configs in that order too? maybe not needed
