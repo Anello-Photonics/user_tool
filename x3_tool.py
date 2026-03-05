@@ -257,7 +257,7 @@ class UserProgram:
             print("\nFor ANELLO X3: use port number of RS422 cable as 'data' and UART cable as 'configuration'")
             self.release()
             board = X3_Unit()
-            manual_result = board.connect_manually(set_data_port=True)
+            manual_result = board.connect_manually(set_data_port=True, auto_baud=False)
             if manual_result is None:
                 return None
         else:  # cancel
@@ -269,9 +269,7 @@ class UserProgram:
 
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
-            board.release_connections()
-            show_and_pause("\nfailed to read product info. Check connection settings and try again.")
-            return None
+            show_and_pause("\nwarning: failed to read product info. Check connection settings.")
 
         # let io_thread do the data connection - give it the signal, close this copy
         self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
@@ -302,7 +300,7 @@ class UserProgram:
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
-            return #false means read failed -> go back to menu
+            print("Error reading configs") # allow for now, with warning
         #check connection again since error can be caught in read_all_configs
         if not self.con_on.value:
             return
@@ -369,7 +367,7 @@ class UserProgram:
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
-            show_and_pause(f"Error reading unit configs. Try again or check cables.\n")
+            self.available_configs = CFG_CODES_TO_NAMES.copy() # read error - allow setting any config
             return False
             
     def save_configurations(self):
