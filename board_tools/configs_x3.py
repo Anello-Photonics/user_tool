@@ -54,6 +54,12 @@ CFG_VALUE_OPTIONS = {
     "sync": ["on", "off"],
 }
 
+# maximum odr to allow: depends on message format and baud
+X3_MAX_ODR = {
+    b'1': {b'921600': b'200', b'460800': b'200', b'230400': b'100', b'115200': b'50', b'57600': b'20'}, # ascii max odr at each baud
+    b'0': {b'921600': b'200', b'460800': b'200', b'230400': b'200', b'115200': b'100', b'57600': b'50'}, # binary max odr at each baud
+}
+
 CFG_VALUE_NAMES = {
     ("mfm", "1"): "ASCII",
     ("mfm", "4"): "RTCM",

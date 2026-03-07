@@ -80,7 +80,7 @@ class UserProgram:
         self.last_imu_time = last_imu_time
 
         #any features which might or not be there - do based on firmware version?
-        self.available_configs = []
+        self.available_configs = {}
 
     def mainloop(self):
         while True:
@@ -344,6 +344,26 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
+        # check for bad odr/baud/format combinations if any of them change
+        if code in ['odr', 'bau', 'mfm']:
+            desired_configs = self.available_configs.copy()
+            desired_configs.update(args)
+            try:
+                max_odr = X3_MAX_ODR[desired_configs['mfm']][desired_configs['bau']] #
+                if int(desired_configs['odr']) > int(max_odr):
+                    print(f"\nWarning: output rate will be too high for this baud and message format, and may cause messaging errors.")
+                    print(f"\nReduce output rate to {max_odr.decode()} Hz?")
+                    options = ['reduce rate', 'keep my choice', 'cancel']
+                    chosen = options[cutie.select(options)]
+                    if chosen == "cancel":
+                        return #change nothing, stays at current settings
+                    elif chosen == "reduce rate":
+                        args['odr'] = max_odr  # set this odr instead of requested odr, or in addition to requested baud or format
+                    # else "keep my choice": gives the command without modification.
+            except KeyError:
+                # could not read all the configs needed for this check -> just let you set the config
+                pass
+
         resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
         if not proper_response(resp, b'CFG'):
             show_and_pause("") # proper_response already shows error, just pause to see it.
@@ -357,7 +377,7 @@ class UserProgram:
             #TODO - print the configs in order of CFG_CODES_TO_NAMES,
             # and put available_configs in that order too? maybe not needed
 
-            self.available_configs = list(configs_dict.keys())
+            self.available_configs = configs_dict
             print("Unit Configurations:")
             for cfg_field_code in configs_dict:
                 if cfg_field_code in CFG_CODES_TO_NAMES:
@@ -367,7 +387,7 @@ class UserProgram:
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
-            self.available_configs = CFG_CODES_TO_NAMES.copy() # read error - allow setting any config
+            self.available_configs = {code: None for code in CFG_CODES_TO_NAMES} # read error - allow setting any config
             return False
             
     def save_configurations(self):
