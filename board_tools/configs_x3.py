@@ -1,11 +1,11 @@
 # configs for x3_tool. import everything from user_program_config, but can also overwrite or add new configs here.
 from user_program_config import *
-from board_config import ALLOWED_BAUD_SORTED
 
 #__________Main user program configs__________:
 DEBUG = False
 import time
 
+X3_BAUDS = [921600, 460800, 230400, 115200, 57600] # no 19200 which is allowed on EVK. default 460800
 
 MENU_OPTIONS_X3 = [
     "Refresh",
@@ -50,7 +50,7 @@ CFG_FIELD_EXAMPLES = {
 CFG_VALUE_OPTIONS = {
     "mfm": ["1", "0"], #1 = ASCII, 0 = Binary. No RTCM for X3.
     "odr": ["20", "50", "100", "200"],
-    "bau":  [str(x) for x in ALLOWED_BAUD_SORTED],
+    "bau":  [str(x) for x in X3_BAUDS],
     "sync": ["on", "off"],
 }
 
