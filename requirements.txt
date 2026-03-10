@@ -1,5 +1,6 @@
 bitstring #used for binary parsing in rtcm_scheme.py
 cutie #text based menus in user_program, config.py and other tools
+setuptools<=80.8.0 # for geotiler, need older setuptools which still has pkg_resources
 geotiler==0.15.1  #map library for user_program map
 matplotlib #graphing, requirement for PySimpleGUI
 numpy #vector math, used in calibration/validation/plotting

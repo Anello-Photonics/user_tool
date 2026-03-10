@@ -52,7 +52,7 @@ class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
     def __init__(self, exitflag, con_on, con_start, con_stop, con_succeed,
-                 con_type, com_port, data_port_baud, config_port_baud, udp_ip, udp_port, gps_received,
+                 con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                  log_on, log_start, log_stop, log_name,
                  ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                  ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -80,7 +80,7 @@ class UserProgram:
         self.last_imu_time = last_imu_time
 
         #any features which might or not be there - do based on firmware version?
-        self.available_configs = []
+        self.available_configs = {}
 
     def mainloop(self):
         while True:
@@ -257,7 +257,7 @@ class UserProgram:
             print("\nFor ANELLO X3: use port number of RS422 cable as 'data' and UART cable as 'configuration'")
             self.release()
             board = X3_Unit()
-            manual_result = board.connect_manually(set_data_port=True)
+            manual_result = board.connect_manually(set_data_port=True, auto_baud=False)
             if manual_result is None:
                 return None
         else:  # cancel
@@ -269,9 +269,7 @@ class UserProgram:
 
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
-            board.release_connections()
-            show_and_pause("\nfailed to read product info. Check connection settings and try again.")
-            return None
+            show_and_pause("\nwarning: failed to read product info. Check connection settings.")
 
         # let io_thread do the data connection - give it the signal, close this copy
         self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
@@ -302,7 +300,8 @@ class UserProgram:
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
-            return #false means read failed -> go back to menu
+            print("Error reading configs. If this error persists, check cable connections or lower the output data rate.\n") # allow for now, with warning
+            print("Set configs anyway?\n")
         #check connection again since error can be caught in read_all_configs
         if not self.con_on.value:
             return
@@ -346,6 +345,26 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
+        # check for bad odr/baud/format combinations if any of them change
+        if code in ['odr', 'bau', 'mfm']:
+            desired_configs = self.available_configs.copy()
+            desired_configs.update(args)
+            try:
+                max_odr = X3_MAX_ODR[desired_configs['mfm']][desired_configs['bau']] #
+                if int(desired_configs['odr']) > int(max_odr):
+                    print(f"\nWarning: output rate will be too high for this baud and message format, and may cause messaging errors.")
+                    print(f"\nReduce output rate to {max_odr.decode()} Hz?")
+                    options = ['reduce rate', 'keep my choice', 'cancel']
+                    chosen = options[cutie.select(options)]
+                    if chosen == "cancel":
+                        return #change nothing, stays at current settings
+                    elif chosen == "reduce rate":
+                        args['odr'] = max_odr  # set this odr instead of requested odr, or in addition to requested baud or format
+                    # else "keep my choice": gives the command without modification.
+            except KeyError:
+                # could not read all the configs needed for this check -> just let you set the config
+                pass
+
         resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
         if not proper_response(resp, b'CFG'):
             show_and_pause("") # proper_response already shows error, just pause to see it.
@@ -359,7 +378,7 @@ class UserProgram:
             #TODO - print the configs in order of CFG_CODES_TO_NAMES,
             # and put available_configs in that order too? maybe not needed
 
-            self.available_configs = list(configs_dict.keys())
+            self.available_configs = configs_dict
             print("Unit Configurations:")
             for cfg_field_code in configs_dict:
                 if cfg_field_code in CFG_CODES_TO_NAMES:
@@ -369,7 +388,7 @@ class UserProgram:
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
-            show_and_pause(f"Error reading unit configs. Try again or check cables.\n")
+            self.available_configs = {code: None for code in CFG_CODES_TO_NAMES} # read error - allow setting any config
             return False
             
     def save_configurations(self):
@@ -718,10 +737,13 @@ class UserProgram:
         new_control_baud = self.board.get_control_baud_flash()
         new_data_baud = self.board.get_data_baud_flash()
         print("\nrestarting")
-        self.board.reset_with_waits(new_control_baud, new_data_baud)
+        reset_success = self.board.reset_with_waits(new_control_baud, new_data_baud)
+        if not reset_success:
+            show_and_pause("no ping response after reset: may have connection issues")
 
         # tell ioloop to use the new data port baud
-        self.data_port_baud.value = new_data_baud
+        if new_data_baud:
+            self.data_port_baud.value = new_data_baud
         self.con_start.value = 1
         while self.con_succeed.value == 0:
             time.sleep(0.1)

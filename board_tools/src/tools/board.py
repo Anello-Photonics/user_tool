@@ -393,7 +393,7 @@ class IMUBoard:
                 return True
             else:
                 continue
-        return self.connect_manually(set_data_port) #TODO - turn this off, or do based on a "manual_fallback" arg?
+        return self.connect_manually(set_data_port, auto_baud=False) #TODO - turn this off, or do based on a "manual_fallback" arg?
 
     # detect ports with known baud rate, returns ports or None on fail
     def auto_port(self, control_baud, set_data_port=True):
@@ -632,7 +632,7 @@ class IMUBoard:
         self.control_connection.readall()
         self.data_connection.readall()
 
-    def connect_manually(self, set_data_port=False, set_config_port=True):
+    def connect_manually(self, set_data_port=False, set_config_port=True, auto_baud=True):
         # get the port numbers
         # stream = os.popen("python -m serial.tools.list_ports")
         # port_names = [line.strip() for line in stream.readlines()]
@@ -702,7 +702,18 @@ class IMUBoard:
         self.data_port_name = data_port
         self.control_connection = control_con
         self.control_port_name = control_port
-        control_baud, data_baud = self.auto_detect_baud()
+        if auto_baud:
+            control_baud, data_baud = self.auto_detect_baud()
+        else:
+            # select baud. normally same for both ports, but some products could allow different baud
+            baud_options = ALLOWED_BAUD_SORTED.copy()
+            baud_options.append("auto detect")
+            print("\nselect baud rate:")
+            chosen_baud = baud_options[cutie.select(baud_options)]
+            if chosen_baud == "auto detect":
+                self.auto_detect_baud()
+            else:
+                self.set_connection_baud(chosen_baud, chosen_baud)
         # print("auto detected baud = "+str(baud))
         self.write_connection_settings(set_data_port)
         return True #control_port, data_port, baud #{"control port": port, "data port": data_port, "baud": baud}
@@ -1163,9 +1174,13 @@ class IMUBoard:
         # use the new baud if it changed, otherwise ping and other messages will fail.
         self.set_connection_baud(new_control_baud, new_data_baud)
 
+        time_before = time.time()
         while self.ping() is None:
-            #TODO - should this time out eventually -> retry connection?
+            if time.time() - time_before > 10:
+                return False # indicate error in restart
             time.sleep(wait_time)
+
+        return True #indicate successful restart
 
     def find_bootloader_name(self):
         windows_bootloader_name = "crossplatform_bootloader_windows_x86_release.exe"
