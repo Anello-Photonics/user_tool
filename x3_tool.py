@@ -300,7 +300,8 @@ class UserProgram:
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
-            print("Error reading configs") # allow for now, with warning
+            print("Error reading configs. If this error persists, check cable connections or lower the output data rate.\n") # allow for now, with warning
+            print("Set configs anyway?\n")
         #check connection again since error can be caught in read_all_configs
         if not self.con_on.value:
             return
@@ -736,10 +737,13 @@ class UserProgram:
         new_control_baud = self.board.get_control_baud_flash()
         new_data_baud = self.board.get_data_baud_flash()
         print("\nrestarting")
-        self.board.reset_with_waits(new_control_baud, new_data_baud)
+        reset_success = self.board.reset_with_waits(new_control_baud, new_data_baud)
+        if not reset_success:
+            show_and_pause("no ping response after reset: may have connection issues")
 
         # tell ioloop to use the new data port baud
-        self.data_port_baud.value = new_data_baud
+        if new_data_baud:
+            self.data_port_baud.value = new_data_baud
         self.con_start.value = 1
         while self.con_succeed.value == 0:
             time.sleep(0.1)

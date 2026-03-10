@@ -707,9 +707,13 @@ class IMUBoard:
         else:
             # select baud. normally same for both ports, but some products could allow different baud
             baud_options = ALLOWED_BAUD_SORTED.copy()
+            baud_options.append("auto detect")
             print("\nselect baud rate:")
             chosen_baud = baud_options[cutie.select(baud_options)]
-            self.set_connection_baud(chosen_baud, chosen_baud)
+            if chosen_baud == "auto detect":
+                self.auto_detect_baud()
+            else:
+                self.set_connection_baud(chosen_baud, chosen_baud)
         # print("auto detected baud = "+str(baud))
         self.write_connection_settings(set_data_port)
         return True #control_port, data_port, baud #{"control port": port, "data port": data_port, "baud": baud}
@@ -1170,9 +1174,13 @@ class IMUBoard:
         # use the new baud if it changed, otherwise ping and other messages will fail.
         self.set_connection_baud(new_control_baud, new_data_baud)
 
+        time_before = time.time()
         while self.ping() is None:
-            #TODO - should this time out eventually -> retry connection?
+            if time.time() - time_before > 10:
+                return False # indicate error in restart
             time.sleep(wait_time)
+
+        return True #indicate successful restart
 
     def find_bootloader_name(self):
         windows_bootloader_name = "crossplatform_bootloader_windows_x86_release.exe"
