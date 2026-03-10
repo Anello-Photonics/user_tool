@@ -52,7 +52,7 @@ class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
     def __init__(self, exitflag, con_on, con_start, con_stop, con_succeed,
-                 con_type, com_port, data_port_baud, config_port_baud, udp_ip, udp_port, gps_received,
+                 con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
                  log_on, log_start, log_stop, log_name,
                  ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                  ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
