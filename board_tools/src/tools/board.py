@@ -637,9 +637,8 @@ class IMUBoard:
         # stream = os.popen("python -m serial.tools.list_ports")
         # port_names = [line.strip() for line in stream.readlines()]
         port_names = self.list_ports()
-        if not port_names:
-            show_and_pause("no ports found.")
-            return None
+        # Add option to manually enter port path (for non-standard ports like /dev/ttyUART*)
+        port_names.append("enter manually")
         port_names.append("cancel")
         data_con = DummyConnection()
         serial_con = DummyConnection()
@@ -655,6 +654,10 @@ class IMUBoard:
                         data_con.close() #disconnect in case it's needed
                         serial_con.close()
                         return None
+                    if data_port == "enter manually":
+                        data_port = input("enter data port path (e.g. /dev/ttyUART0): ").strip()
+                        if not data_port:
+                            continue
                     if not set_config_port:
                         valid_baud_rates = ALLOWED_BAUD_SORTED.copy()
                         print("\nselect baud rate")
@@ -691,6 +694,10 @@ class IMUBoard:
                     data_con.close()  # disconnect in case it's needed
                     serial_con.close()
                     return  # TODO - need to disconnect from anything first?
+                if control_port == "enter manually":
+                    control_port = input("enter configuration port path (e.g. /dev/ttyUART1): ").strip()
+                    if not control_port:
+                        continue
                 control_con = SerialConnection(control_port, DEFAULT_BAUD, timeout=TIMEOUT_REGULAR)
             except serial.serialutil.SerialException:
                 print("\nerror connecting to " + control_port + " - wrong port number or port is busy")
