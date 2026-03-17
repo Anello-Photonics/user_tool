@@ -450,7 +450,7 @@ class IMUBoard:
             else:
                 continue
         return self.connect_manually(set_data_port) #TODO - turn this off, or do based on a "manual_fallback" arg?
-        
+
     #TODO adapt this function for serial number
     def auto_port_from_sn(self, baud, serial_number: str, set_data_port=True):
         debug_print(f"auto_port, baud = {baud}, set_data_port = {set_data_port}")
@@ -520,7 +520,7 @@ class IMUBoard:
                 conn = SerialConnection(port_name, self.data_baud, timeout=TIMEOUT_REGULAR)
                 for i in range(iteration_count):
                     time.sleep(.01)
-                    data_arr.append(len(conn.readall()))    
+                    data_arr.append(len(conn.readall()))
                 conn.close()
             except Exception as e:
                 if not conn is None:
@@ -590,7 +590,7 @@ class IMUBoard:
         #     self.data_scheme = ReadableScheme()
         # elif msg_format == b'4':
         #     self.data_scheme = RTCM_Scheme()
-        
+
         for possible_data_port in all_ports:
             debug_print(f"looking for data port at {possible_data_port}, data scheme is {self.data_scheme}")
             if self.connect_data_port(possible_data_port, self.data_baud):
@@ -637,9 +637,8 @@ class IMUBoard:
         # stream = os.popen("python -m serial.tools.list_ports")
         # port_names = [line.strip() for line in stream.readlines()]
         port_names = self.list_ports()
-        if not port_names:
-            show_and_pause("no ports found.")
-            return None
+        # Add option to manually enter port path (for non-standard ports like /dev/ttyUART*)
+        port_names.append("enter manually")
         port_names.append("cancel")
         data_con = DummyConnection()
         serial_con = DummyConnection()
@@ -655,6 +654,10 @@ class IMUBoard:
                         data_con.close() #disconnect in case it's needed
                         serial_con.close()
                         return None
+                    if data_port == "enter manually":
+                        data_port = input("enter data port path (e.g. /dev/ttyUART0): ").strip()
+                        if not data_port:
+                            continue
                     if not set_config_port:
                         valid_baud_rates = ALLOWED_BAUD_SORTED.copy()
                         print("\nselect baud rate")
@@ -691,6 +694,10 @@ class IMUBoard:
                     data_con.close()  # disconnect in case it's needed
                     serial_con.close()
                     return  # TODO - need to disconnect from anything first?
+                if control_port == "enter manually":
+                    control_port = input("enter configuration port path (e.g. /dev/ttyUART1): ").strip()
+                    if not control_port:
+                        continue
                 control_con = SerialConnection(control_port, DEFAULT_BAUD, timeout=TIMEOUT_REGULAR)
             except serial.serialutil.SerialException:
                 print("\nerror connecting to " + control_port + " - wrong port number or port is busy")
@@ -723,12 +730,12 @@ class IMUBoard:
     def read_one_message(self, num_attempts=1):
         debug_print("read_one_message")
         message = None
-        # When UDP is used it returns empty messages. This while loop is used to ensure there is a message 
+        # When UDP is used it returns empty messages. This while loop is used to ensure there is a message
         # before exiting
-        attempt_count = 0 
-        while message == None or message.__dict__ == {}: 
+        attempt_count = 0
+        while message == None or message.__dict__ == {}:
             if hasattr(self, "msg_format") and self.msg_format == b"4" and hasattr(self.data_connection, "sock"):
-                #   When UDP and RTCM is use we can only get message this way 
+                #   When UDP and RTCM is use we can only get message this way
                 message = self.data_scheme.read_one_message(self.data_connection.sock)
             else:
                 message = self.data_scheme.read_one_message(self.data_connection)
@@ -1257,7 +1264,7 @@ class IMUBoard:
             subprocess.call(['sudo', bootloader_path, 'START', 'TC36X', '6', str(port_number), '115200', '0', '0', '0', '0'])
             subprocess.call(['sudo', bootloader_path, 'PROGRAM', hex_file_path])
             subprocess.call(['sudo', bootloader_path, 'END'])
-        
+
         else:
             # find_bootloader_name should already catch if OS not supported.
             show_and_pause(f"Bootloader does not support {computer_os} Operating System")
