@@ -14,6 +14,7 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     import base64
     import socket
     import select
+    import PySimpleGUI as sg
     import random
     import io
     import re
@@ -28,22 +29,16 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.src.tools import *
     from board_tools.configs_x3 import *
     from board_tools.ioloop import *
+    from board_tools.convertLog_x3 import export_logs_detect_format
     from board_tools.src.tools.x3_unit import X3_Unit
+    from board_tools.src.tools.x3_single_port import X3_Single_Port
+    from board_tools.file_picking import pick_one_file, pick_multiple_files
     from board_tools.log_config_x3 import log_board_config
     from user_program import default_log_name
 
-    USE_GRAPHICS = True
-    if '-h' in sys.argv or '--headless' in sys.argv:
-        USE_GRAPHICS = False
-
-    if USE_GRAPHICS:
-        import PySimpleGUI as sg
-        from board_tools.convertLog_x3 import export_logs_detect_format
-        from board_tools.file_picking import pick_one_file, pick_multiple_files
-        LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
-        ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
-        OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
-
+    LOGO_PATH = os.path.join(BOARD_TOOLS_DIR, "anello_scaled.png")
+    ON_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, ON_BUTTON_FILE)
+    OFF_BUTTON_PATH = os.path.join(BOARD_TOOLS_DIR, OFF_BUTTON_FILE)
 
 X3_TOOL_VERSION = "1.0"
 
@@ -52,7 +47,7 @@ class UserProgram:
 
     #(data_connection, logging_on, log_name, log_file, ntrip_on, ntrip_reader, ntrip_request, ntrip_ip, ntrip_port)
     def __init__(self, exitflag, con_on, con_start, con_stop, con_succeed,
-                 con_type, com_port, data_port_baud, control_port_baud, udp_ip, udp_port, gps_received,
+                 con_type, com_port, data_port_baud, config_port_baud, udp_ip, udp_port, gps_received,
                  log_on, log_start, log_stop, log_name,
                  ntrip_on, ntrip_start, ntrip_stop, ntrip_succeed,
                  ntrip_ip, ntrip_port, ntrip_gga, ntrip_req,
@@ -80,7 +75,7 @@ class UserProgram:
         self.last_imu_time = last_imu_time
 
         #any features which might or not be there - do based on firmware version?
-        self.available_configs = {}
+        self.available_configs = []
 
     def mainloop(self):
         while True:
@@ -92,10 +87,6 @@ class UserProgram:
                 if self.board:
                     # is connected -> normal options
                     menu_options = MENU_OPTIONS_X3.copy()
-                    if not USE_GRAPHICS:
-                        menu_options.remove("Monitor")
-                        menu_options.remove("Firmware Update")
-
                 else:
                     # not connected: reduced options
                     menu_options = MENU_OPTIONS_WHEN_DISCONNECTED
@@ -154,8 +145,8 @@ class UserProgram:
         #self.connection_info = None #probably don't set to None - this tracks udp/com and port numbers.
         if self.board:
             #close board's data and odometer connections, keep control connection open.
-            if hasattr(self.board, "data_connection"):  #setting con_stop to 1 -> ioloop will also close it.
-                self.board.data_connection.close()
+            # if hasattr(self.board, "data_connection"):  #setting con_stop to 1 -> ioloop will also close it.
+            #     self.board.data_connection.close()
             if hasattr(self.board, "odometer_connection") and self.board.odometer_connection:
                 self.board.odometer_connection.close()
 
@@ -165,14 +156,29 @@ class UserProgram:
         self.con_stop.value = 1
         time.sleep(1) #wait for communications to stop - can it check for stop?
 
+    def start_data_mode(self):
+        self.board.serial_connection.close()
+        #check success from ioloop. TODO - maybe check new_connection here - will be None for cancel, then dont wait
+        debug_print("wait for connect success")
+        self.con_start.value = 1
+        while self.con_succeed.value == 0:
+            time.sleep(0.1)
+            # should it time out eventually?
+        debug_print("done waiting")
+        data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
+        debug_print("data success: "+str(data_success))
+        self.con_succeed.value = 0
+
+    def stop_data_mode(self):
+        self.con_stop.value = 1
+        time.sleep(1) #wait for ioloop to close connection
+
     # if we clear after every action, refresh does nothing extra
     def refresh(self):
         pass
 
     def show_info(self):
         print(f"\nANELLO X3 Setup Tool, version {X3_TOOL_VERSION}, " + date_time())
-        if not USE_GRAPHICS:
-            print("headless mode: graphics are disabled")
         print("\nSystem Status:")
         self.show_device()
         self.show_connection()
@@ -190,7 +196,7 @@ class UserProgram:
         if con and self.con_on.value:
             # example is "A-1:SN is Connected on COM57"  - connect and get serial number?
             output = "    Connection: "+con["type"]+": "
-            output += "configuration port = "+con["control port"]+", data port = "+con["data port"]
+            output += "configuration port = "+con["control port"]
             print(output)
         else:
             print("    Connection: Not connected")
@@ -228,16 +234,16 @@ class UserProgram:
                 show_and_pause("error connecting - check connections and try again")
                 continue
 
-            #check success from ioloop. TODO - maybe check new_connection here - will be None for cancel, then dont wait
-            debug_print("wait for connect success")
-            while self.con_succeed.value == 0:
-                time.sleep(0.1)
-                # should it time out eventually?
-            debug_print("done waiting")
-            data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
-            debug_print("data success: "+str(data_success)+", control success: "+str(control_success))
-            self.con_succeed.value = 0
-            if data_success and control_success:
+            # #check success from ioloop. TODO - maybe check new_connection here - will be None for cancel, then dont wait
+            # debug_print("wait for connect success")
+            # while self.con_succeed.value == 0:
+            #     time.sleep(0.1)
+            #     # should it time out eventually?
+            # debug_print("done waiting")
+            # data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
+            # debug_print("data success: "+str(data_success)+", control success: "+str(control_success))
+            # self.con_succeed.value = 0
+            if control_success:
                 return
             else:
                 self.release()
@@ -250,14 +256,14 @@ class UserProgram:
         selected = options[cutie.select(options)]
         if selected == "Auto":
             self.release()
-            board = X3_Unit.auto(set_data_port=True)
+            board = X3_Single_Port.auto()
             if not board:
                 return None
         elif selected == "Manual":
-            print("\nFor ANELLO X3: use port number of RS422 cable as 'data' and RS232 cable as 'configuration'")
+            print("\nFor ANELLO X3: use port number of RS422 or RS232 cable")
             self.release()
-            board = X3_Unit()
-            manual_result = board.connect_manually(set_data_port=True, auto_baud=False)
+            board = X3_Single_Port()
+            manual_result = board.connect_manually()
             if manual_result is None:
                 return None
         else:  # cancel
@@ -265,18 +271,19 @@ class UserProgram:
 
         self.board = board
         data_port_name = board.data_port_name
-        board.data_connection.close()
+        # board.data_connection.close()
 
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
-            show_and_pause("\nwarning: failed to read product info. Check connection settings.")
+            board.release_connections()
+            show_and_pause("\nfailed to read product info. Check connection settings and try again.")
+            return None
 
         # let io_thread do the data connection - give it the signal, close this copy
         self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
         self.con_type.value = b"COM"
         self.con_on.value = 1
-        self.con_start.value = 1
-        return {"type": "COM", "control port": board.control_port_name, "data port": data_port_name}
+        return {"type": "COM", "control port": board.control_port_name}
 
     def product_info_on_connect(self, board):
         combinations = (
@@ -300,8 +307,7 @@ class UserProgram:
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
-            print("Error reading configs. If this error persists, check cable connections or lower the output data rate.\n") # allow for now, with warning
-            print("Set configs anyway?\n")
+            return #false means read failed -> go back to menu
         #check connection again since error can be caught in read_all_configs
         if not self.con_on.value:
             return
@@ -345,26 +351,6 @@ class UserProgram:
             value = input()
         args[code] = value.encode()
 
-        # check for bad odr/baud/format combinations if any of them change
-        if code in ['odr', 'bau', 'mfm']:
-            desired_configs = self.available_configs.copy()
-            desired_configs.update(args)
-            try:
-                max_odr = X3_MAX_ODR[desired_configs['mfm']][desired_configs['bau']] #
-                if int(desired_configs['odr']) > int(max_odr):
-                    print(f"\nWarning: output rate will be too high for this baud and message format, and may cause messaging errors.")
-                    print(f"\nReduce output rate to {max_odr.decode()} Hz?")
-                    options = ['reduce rate', 'keep my choice', 'cancel']
-                    chosen = options[cutie.select(options)]
-                    if chosen == "cancel":
-                        return #change nothing, stays at current settings
-                    elif chosen == "reduce rate":
-                        args['odr'] = max_odr  # set this odr instead of requested odr, or in addition to requested baud or format
-                    # else "keep my choice": gives the command without modification.
-            except KeyError:
-                # could not read all the configs needed for this check -> just let you set the config
-                pass
-
         resp = self.retry_command(method=self.board.set_cfg_flash, args=[args], response_types=[b'CFG', b'ERR'])
         if not proper_response(resp, b'CFG'):
             show_and_pause("") # proper_response already shows error, just pause to see it.
@@ -378,7 +364,7 @@ class UserProgram:
             #TODO - print the configs in order of CFG_CODES_TO_NAMES,
             # and put available_configs in that order too? maybe not needed
 
-            self.available_configs = configs_dict
+            self.available_configs = list(configs_dict.keys())
             print("Unit Configurations:")
             for cfg_field_code in configs_dict:
                 if cfg_field_code in CFG_CODES_TO_NAMES:
@@ -388,7 +374,7 @@ class UserProgram:
                     print("\t" + full_name + ":\t" + value_name)
             return True
         else:
-            self.available_configs = {code: None for code in CFG_CODES_TO_NAMES} # read error - allow setting any config
+            show_and_pause(f"Error reading unit configs. Try again or check cables.\n")
             return False
             
     def save_configurations(self):
@@ -407,29 +393,30 @@ class UserProgram:
     # also count NTRIP messages if connected
     # stop when esc or q is entered
     def log(self):
-        clear_screen()
-        self.show_logging()
-        actions = ["cancel"]
-        # csv export needs graphics for file picker
-        if USE_GRAPHICS:
-            actions = ["Export to CSV"] + actions
-        if self.log_on.value:
-            actions = ["Stop"]+actions
-        else:
-            actions = ["Start"] + actions
-        selected_action = actions[cutie.select(actions)]
-        if selected_action == "Export to CSV":
-            print("\nSelect logs in the file picker window")
-            if export_logs_detect_format():
-                show_and_pause("\nfinished exporting") #show if not canceled
-            else: #canceled in file picker. #TODO - handle export errors here too?
+        while True:
+            clear_screen()
+            self.show_logging()
+            actions = ["Export to CSV"]
+            if self.log_on.value:
+                actions = ["Stop"]+actions
+            else:
+                actions = ["Start"] + actions + ["cancel"]
+            selected_action = actions[cutie.select(actions)]
+            if selected_action == "Export to CSV":
+                print("\nSelect logs in the file picker window")
+                if export_logs_detect_format():
+                    show_and_pause("\nfinished exporting") #show if not canceled
+                else: #canceled in file picker. #TODO - handle export errors here too?
+                    return
+            elif selected_action == "Start":
+                self.start_logging()
+            elif selected_action == "Stop":
+                self.stop_logging()
+                self.stop_data_mode()
+                self.board.serial_connection= SerialConnection(self.board.port_name, self.board.serial_baud, timeout=TIMEOUT_REGULAR)
+            else: #cancel
+                break
                 return
-        elif selected_action == "Start":
-            self.start_logging()
-        elif selected_action == "Stop":
-            self.stop_logging()
-        else: #cancel
-            return
 
     def start_logging(self):
         if self.log_on.value:
@@ -447,33 +434,41 @@ class UserProgram:
                 chosen_name = suggested
             else:
                 chosen_name = input("file name: ")
+            self.save_configurations()
+            self.start_data_mode()
             self.log_name.value = chosen_name.encode()
             self.log_on.value = 1
             self.log_start.value = 1
-            self.save_configurations()
+            
 
     def stop_logging(self):
         self.log_on.value = 0
         self.log_stop.value = 1 #send stop signal to other thread which will close the log
 
     def monitor(self):
-
-        if not USE_GRAPHICS:
-            show_and_pause("\nno monitor when USE_GRAPHICS flag is false")
-            return
-
         if not self.board:
             show_and_pause("connect before monitoring")
             return
 
         #main window freezes until monitor closes - explain that.
         clear_screen()
+        
         print("\nMonitoring in other window. Close it to continue.")
+
+        self.start_data_mode()
 
         # prevent prints in monitor, like PySimpleGUI prints on mac
         # this didn't stop geotiler prints when no internet -> do in geotiler_demo too?
         with open(os.devnull, "w") as f, redirect_stdout(f):
             self.monitor_main()
+
+        # Stop logging if logging was turned on in Monitor window and shut off there.
+        # NOTE: This is needed because of sharing a single serial port between runUserProg ("config mode") and ioloop ("data mode").
+        if self.log_on.value:
+            self.stop_logging()
+
+        self.stop_data_mode()
+        self.board.serial_connection= SerialConnection(self.board.port_name, self.board.serial_baud, timeout=TIMEOUT_REGULAR)
 
     def monitor_main(self):
         ascii_scheme = ReadableScheme()
@@ -686,8 +681,14 @@ class UserProgram:
         print("\nFirmware upgrade process")
         print("\nNotes:")
         print("\tGet the firmware file from ANELLO Photonics: X3_v<version number>.hex")
-        print("\tSoftware update is over USB only, not ethernet.")
+        print("\tSoftware update is over RS422 only, not RS232.")
         print("\tSupports Windows and Linux OS.")
+
+        ping_response = self.board.retry_ping()
+        # handle if ping_response is None -> indicate connection issue?
+        if ping_response == 2:
+            show_and_pause("\nSwitch to RS422 to update firmware")
+            return
 
         if not (self.board and self.connection_info["type"] == "COM"):
             show_and_pause("\nMust connect by USB before upgrading (not over ethernet)")
@@ -714,7 +715,7 @@ class UserProgram:
             self.release_for_bootload() #release data port and stop functions that use it like logging, ntrip
             try:
                 expect_version_after = "unknown"  # this means it won't check expected version
-                self.board.bootload_with_file_path(bootloader_name, hex_file_path, expect_version_after, num_attempts=1)
+                self.board.bootload_with_file_path(bootloader_name, hex_file_path, self.com_port, expect_version_after, num_attempts=1)
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()
@@ -722,7 +723,7 @@ class UserProgram:
                 return #should it try to connect here?
 
             show_and_pause(f"\n\nFinished updating")
-            self.connect()  # go back to connect step since it disconnects during bootload.
+            #self.connect()  # go back to connect step since it disconnects during bootload.
 
         else:
             return
@@ -737,13 +738,10 @@ class UserProgram:
         new_control_baud = self.board.get_control_baud_flash()
         new_data_baud = self.board.get_data_baud_flash()
         print("\nrestarting")
-        reset_success = self.board.reset_with_waits(new_control_baud, new_data_baud)
-        if not reset_success:
-            show_and_pause("no ping response after reset: may have connection issues")
+        self.board.reset_with_waits(new_control_baud, new_data_baud)
 
         # tell ioloop to use the new data port baud
-        if new_data_baud:
-            self.data_port_baud.value = new_data_baud
+        self.data_port_baud.value = new_data_baud
         self.con_start.value = 1
         while self.con_succeed.value == 0:
             time.sleep(0.1)

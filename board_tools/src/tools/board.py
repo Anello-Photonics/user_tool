@@ -883,13 +883,6 @@ class IMUBoard:
                 return True
         return False
 
-    # makes lookup tables from flash apply to ram without restarting the unit.
-    # unlike rst 0 and 2, this doesn't restart the unit, so it gets a response.
-    # TODO - this is added in X3 0.0.27 firmware. Move into X3_Board class, or will other products have it too?
-    def apply_lookup_tables(self):
-        m = Message({'msgtype': b'RST', 'code': 3})
-        return self.send_control_message(m)
-
     #send odometer message: over the udp odometer connection if exists, else config connection
     #config connection can take odometer messages but it could interfere with other config messaging
     def send_odometer(self, speed):
@@ -1090,6 +1083,9 @@ class IMUBoard:
         #m = Message({'msgtype': b'STA'})
         return self.retry_get_info(self.get_status, b'STA', 'payload') #could change later if we finish implementing status
 
+    def retry_ping(self):
+        return self.retry_get_info(self.ping, b'PNG', 'code')
+
     #getters with keywords: use retry_get_info_keywords
     #use this like: odr, msgtype = b.retry_get_cfg_flash(["odr", "msgtype"]). single value:  odr, = b.retry_get_cfg_flash(["odr"])
     #make return_dict an arg for these too, or just return list always?
@@ -1143,18 +1139,6 @@ class IMUBoard:
                 return int(self.retry_get_cfg_flash(["bau"])[0])
         except Exception as e:
             return None
-
-    #def retry_ping(self):  - should it have this?
-    #def retry_echo(self, contents): - should it have this?
-
-    #no retry methods for resets (bootloader/regular) or odometer since they don't respond.
-
-    # def retry_enable_odo_ram(self):
-    #     return self.set_cfg({"odo": b'on'})
-    #
-    # def retry_enable_odo_flash(self):
-    #     return self.set_cfg_flash({"odo": b'on'})
-    #
 
     #config write functions with separate writes and retry, by type
     #should it return pass/fail, or lists of which set, which failed to set?
