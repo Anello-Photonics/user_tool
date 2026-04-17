@@ -68,7 +68,7 @@ class IMUBoard:
         return "IMUBoard: "+str(self.__dict__)
 
     @classmethod
-    def auto(cls, set_data_port=True):
+    def auto(cls, set_data_port=True, manual_fallback=True):
         board = cls()
         try:
             success = True
@@ -89,7 +89,7 @@ class IMUBoard:
             # file not exist, or connecting based on file fails -> detect the settings, then save in a file
             #print("connection from cache failed -> do auto search")
             board.release_connections()
-            if board.auto_no_cache(set_data_port): # None on fail
+            if board.auto_no_cache(set_data_port, manual_fallback): # None on fail
                 board.write_connection_settings(set_data_port) #also counts as success -> save.
             else:
                 board.release_connections()
@@ -383,7 +383,7 @@ class IMUBoard:
         return sorted([p.device for p in list_ports.comports()])
 
     # with no cached value - auto connect by trying baud 921600 for all ports first, then other bauds
-    def auto_no_cache(self, set_data_port=True):
+    def auto_no_cache(self, set_data_port=True, manual_fallback=True):
         #print("\n_____auto no cache_____")
         bauds = ALLOWED_BAUD.copy() #already in preferred order
         for control_baud in bauds:
@@ -393,7 +393,9 @@ class IMUBoard:
                 return True
             else:
                 continue
-        return self.connect_manually(set_data_port, auto_baud=False) #TODO - turn this off, or do based on a "manual_fallback" arg?
+        if manual_fallback:
+            return self.connect_manually(set_data_port, auto_baud=False)
+        return None # connect_manually returns None on fail
 
     # detect ports with known baud rate, returns ports or None on fail
     def auto_port(self, control_baud, set_data_port=True):
@@ -1221,7 +1223,7 @@ class IMUBoard:
         # TODO should it check for 32 bit, or Windows ARM vs x86?
 
     # bootloader function taking hex file path and expected version after
-    def bootload_with_file_path(self, bootloader_path, hex_file_path, expected_version_after="unknown", num_attempts=1):
+    def bootload_with_file_path(self, bootloader_path, hex_file_path, com_port=None, expected_version_after="unknown", num_attempts=1):
         if bootloader_path is None:
             return
         print(f"\nUpdating firmware with {bootloader_path}")
@@ -1234,7 +1236,9 @@ class IMUBoard:
 
         self.release_connections()
         # send bootloader commands. TODO - should it use subprocess.call() instead of os.system()?
-        port_prefix, port_number = split_port_name(self.data_port_name)
+        if com_port is None:
+            com_port = self.data_port_name
+        port_prefix, port_number = split_port_name(com_port)
 
         computer_os = os_type()
         if computer_os.lower() == "windows":

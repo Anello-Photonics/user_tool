@@ -29,6 +29,7 @@ with open(os.devnull, "w") as f, redirect_stdout(f):
     from board_tools.configs_x3 import *
     from board_tools.ioloop import *
     from board_tools.src.tools.x3_unit import X3_Unit
+    from board_tools.src.tools.x3_single_port import X3_Single_Port
     from board_tools.log_config_x3 import log_board_config
     from user_program import default_log_name
 
@@ -67,6 +68,7 @@ class UserProgram:
         self.shared_serial_number.value = b""
         self.version = ""
         self.product_id = ""
+        self.single_port = False
 
         #keep the shared vars as class attributes so other UserProgram methods have them.
         #set them like self.log_name.value = x so change is shared. not self.log_name = x
@@ -154,8 +156,9 @@ class UserProgram:
         #self.connection_info = None #probably don't set to None - this tracks udp/com and port numbers.
         if self.board:
             #close board's data and odometer connections, keep control connection open.
-            if hasattr(self.board, "data_connection"):  #setting con_stop to 1 -> ioloop will also close it.
-                self.board.data_connection.close()
+            # TODO - release data_connection only in two port case, or can it remove for both cases?
+            # if hasattr(self.board, "data_connection"):  #setting con_stop to 1 -> ioloop will also close it.
+            #     self.board.data_connection.close()
             if hasattr(self.board, "odometer_connection") and self.board.odometer_connection:
                 self.board.odometer_connection.close()
 
@@ -164,6 +167,29 @@ class UserProgram:
         self.con_on.value = 0
         self.con_stop.value = 1
         time.sleep(1) #wait for communications to stop - can it check for stop?
+
+    def start_data_mode(self):
+        self.board.data_connection.close()
+        #check success from ioloop.
+        debug_print("wait for connect success")
+        self.con_start.value = 1
+        while self.con_succeed.value == 0:
+            time.sleep(0.1)
+            # should it time out eventually?
+        debug_print("done waiting")
+        data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
+        debug_print("data success: "+str(data_success))
+        self.con_succeed.value = 0
+        return data_success
+
+    def stop_data_mode(self):
+        self.con_stop.value = 1
+        # wait for ioloop to close connection
+        while self.con_stop.value == 1:
+            time.sleep(0.1)
+        # this is only be used for single port case, but set control_connection just in case
+        if not self.board.control_connection.connection.is_open:
+            self.board.control_connection.open()
 
     # if we clear after every action, refresh does nothing extra
     def refresh(self):
@@ -229,49 +255,66 @@ class UserProgram:
                 continue
 
             #check success from ioloop. TODO - maybe check new_connection here - will be None for cancel, then dont wait
-            debug_print("wait for connect success")
-            while self.con_succeed.value == 0:
-                time.sleep(0.1)
-                # should it time out eventually?
-            debug_print("done waiting")
-            data_success = (self.con_succeed.value == 1) # 0 waiting, 1 succeed, 2 fail
-            debug_print("data success: "+str(data_success)+", control success: "+str(control_success))
-            self.con_succeed.value = 0
+            if self.single_port:
+                data_success = True
+            else:
+                data_success = self.start_data_mode()
+
             if data_success and control_success:
                 return
             else:
                 self.release()
+                print(f"data_success: {data_success}, control_success: {control_success}")
                 show_and_pause("error connecting - check connections and try again")
                 continue
 
     def connect_com(self):
         print("\nConnect by COM port:")
-        options = ["Auto", "Manual", "cancel"]
+        options = ["Auto", "Manual (one port)", "Manual (two ports)", "cancel"]
         selected = options[cutie.select(options)]
         if selected == "Auto":
             self.release()
-            board = X3_Unit.auto(set_data_port=True)
-            if not board:
-                return None
-        elif selected == "Manual":
+            board = X3_Unit.auto(set_data_port=True, manual_fallback=False)
+            if board:
+                print("connected on two ports")
+                self.single_port = False
+            else:
+                board = X3_Single_Port.auto(manual_fallback=False)
+                if board:
+                    print("connected on single port")
+                    self.single_port = True
+                else:
+                    show_and_pause("auto connect failed")
+                    return None
+        elif selected == "Manual (two ports)":
             print("\nFor ANELLO X3: use port number of RS422 cable as 'data' and RS232 cable as 'configuration'")
             self.release()
             board = X3_Unit()
             manual_result = board.connect_manually(set_data_port=True, auto_baud=False)
             if manual_result is None:
                 return None
+            self.single_port = False
+        elif selected == "Manual (one port)":
+            print("\nFor ANELLO X3: use port number of RS422 or RS232 cable")
+            self.release()
+            board = X3_Single_Port()
+            manual_result = board.connect_manually()
+            if manual_result is None:
+                return None
+            self.single_port = True
+
         else:  # cancel
             return "cancel"
 
         self.board = board
         data_port_name = board.data_port_name
-        board.data_connection.close()
 
         # get product info, or assume bad connection if can't read it
         if not self.product_info_on_connect(board):
             show_and_pause("\nwarning: failed to read product info. Check connection settings.")
 
         # let io_thread do the data connection - give it the signal, close this copy
+        board.data_connection.close()
         self.com_port.value, self.data_port_baud.value, self.control_port_baud.value = data_port_name.encode(), board.data_baud, board.control_baud
         self.con_type.value = b"COM"
         self.con_on.value = 1
@@ -297,6 +340,8 @@ class UserProgram:
     def configure(self):
         if not self.board:
             show_and_pause("Must connect before configuring")
+            return
+        elif not self.check_stop_data_mode():
             return
         clear_screen()
         if not self.read_all_configs(self.board):  # show configs automatically
@@ -396,6 +441,9 @@ class UserProgram:
             show_and_pause("\nMust connect before saving")
             return
 
+        if not self.check_stop_data_mode():
+            return
+
         config_path = log_board_config(self.board)
         print(f"\n Configuration Saved to {config_path}")
         time.sleep(.1)
@@ -426,8 +474,11 @@ class UserProgram:
                 return
         elif selected_action == "Start":
             self.start_logging()
+
         elif selected_action == "Stop":
             self.stop_logging()
+            if self.single_port:
+                self.stop_data_mode()
         else: #cancel
             return
 
@@ -447,10 +498,12 @@ class UserProgram:
                 chosen_name = suggested
             else:
                 chosen_name = input("file name: ")
+            self.save_configurations()
+            if self.single_port:
+                self.start_data_mode()
             self.log_name.value = chosen_name.encode()
             self.log_on.value = 1
             self.log_start.value = 1
-            self.save_configurations()
 
     def stop_logging(self):
         self.log_on.value = 0
@@ -469,11 +522,34 @@ class UserProgram:
         #main window freezes until monitor closes - explain that.
         clear_screen()
         print("\nMonitoring in other window. Close it to continue.")
+        if self.single_port:
+            self.start_data_mode()
 
         # prevent prints in monitor, like PySimpleGUI prints on mac
         # this didn't stop geotiler prints when no internet -> do in geotiler_demo too?
         with open(os.devnull, "w") as f, redirect_stdout(f):
             self.monitor_main()
+
+    # prompt if ok to stop logging. needed for single port if we want to do config messaging.
+    def check_stop_data_mode(self):
+        if not self.single_port:
+            #print("two port: no need to stop logging or toggle data mode")
+            return True
+        elif self.log_on.value:
+            # single port and logging: ask if you want to stop the log
+            actions = ["Yes", "No"]
+            print("\nStop logging to perform this action?")
+            chosen = actions[cutie.select(actions)]
+            if chosen == "Yes":
+                self.stop_logging()
+                self.stop_data_mode()
+                return True
+            else:
+                return False
+        else:
+            # single port and not logging: can toggle data mode without asking
+            self.stop_data_mode()
+            return True
 
     def monitor_main(self):
         ascii_scheme = ReadableScheme()
@@ -683,11 +759,20 @@ class UserProgram:
     # tell them to get bootloader exe and hex, give upgrade instructions. Will not do this automatically yet.
     # prompt to activate boot loader mode
     def upgrade(self):
+        if not self.check_stop_data_mode():
+            return
+
         print("\nFirmware upgrade process")
         print("\nNotes:")
         print("\tGet the firmware file from ANELLO Photonics: X3_v<version number>.hex")
-        print("\tSoftware update is over USB only, not ethernet.")
+        print("\tSoftware update is over RS422 only, not RS232.")
         print("\tSupports Windows and Linux OS.")
+
+        if self.single_port:
+            ping_response = self.board.retry_ping()
+            if ping_response == 2:
+                show_and_pause("\nSwitch to RS422 to update firmware")
+                return
 
         if not (self.board and self.connection_info["type"] == "COM"):
             show_and_pause("\nMust connect by USB before upgrading (not over ethernet)")
@@ -713,8 +798,9 @@ class UserProgram:
         if options[cutie.select(options)] == "Yes":
             self.release_for_bootload() #release data port and stop functions that use it like logging, ntrip
             try:
-                expect_version_after = "unknown"  # this means it won't check expected version
-                self.board.bootload_with_file_path(bootloader_name, hex_file_path, expect_version_after, num_attempts=1)
+                # expect_version_after = "unknown" : doesn't check version after
+                # com_port = None: board uses self.data_port_name
+                self.board.bootload_with_file_path(bootloader_name, hex_file_path, com_port=None, expected_version_after="unknown", num_attempts=1)
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()

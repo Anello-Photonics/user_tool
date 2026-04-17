@@ -715,7 +715,8 @@ class UserProgram:
             self.release_for_bootload() #release data port and stop functions that use it like logging, ntrip
             try:
                 expect_version_after = "unknown"  # this means it won't check expected version
-                self.board.bootload_with_file_path(bootloader_name, hex_file_path, self.com_port, expect_version_after, num_attempts=1)
+                port_name = self.com_port.value.decode()
+                self.board.bootload_with_file_path(bootloader_name, hex_file_path, port_name, expect_version_after, num_attempts=1)
             except Exception as e:
                 print(f"\nError during firmware upgrade: {type(e)}: {e}\n")
                 traceback.print_exc()

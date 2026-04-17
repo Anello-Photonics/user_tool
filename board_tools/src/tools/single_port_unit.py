@@ -71,7 +71,7 @@ class Single_Port_Unit(IMUBoard):
         return self.serial_baud
 
     @classmethod
-    def auto(cls):
+    def auto(cls, manual_fallback=True):
         board = cls()
         try:
             success = True
@@ -87,7 +87,7 @@ class Single_Port_Unit(IMUBoard):
         else:
             # file not exist, or connecting based on file fails -> detect the settings, then save in a file
             board.release_connections()
-            if board.auto_no_cache():  # None on fail
+            if board.auto_no_cache(manual_fallback):  # None on fail
                 board.write_connection_settings()  # also counts as success -> save.
             else:
                 board.release_connections()
@@ -95,7 +95,7 @@ class Single_Port_Unit(IMUBoard):
         return board
 
         # with no cached value - auto connect by trying baud 921600 for all ports first, then other bauds
-    def auto_no_cache(self):
+    def auto_no_cache(self, manual_fallback=True):
         bauds = X3_TRY_BAUD_ORDER.copy()  # already in preferred order
         for control_baud in bauds:
             outcome = self.auto_port(control_baud)
@@ -103,7 +103,9 @@ class Single_Port_Unit(IMUBoard):
                 return True
             else:
                 continue
-        return self.connect_manually()
+        if manual_fallback:
+            return self.connect_manually()
+        return None # connect_manually returns None on fail
 
     # detect ports with known baud rate, returns ports or None on fail
     def auto_port(self, fixed_baud):

@@ -34,7 +34,7 @@ class X3_Single_Port(Single_Port_Unit):
     # or implement it in single_port_unit class
 
         # bootloader function taking hex file path and expected version after
-    def bootload_with_file_path(self, bootloader_path, hex_file_path, com_port, expected_version_after="unknown", num_attempts=1):
+    def bootload_with_file_path(self, bootloader_path, hex_file_path, com_port=None, expected_version_after="unknown", num_attempts=1):
         if bootloader_path is None:
             return
         print(f"\nBootloading with {bootloader_path}")
@@ -45,7 +45,9 @@ class X3_Single_Port(Single_Port_Unit):
         self.enter_bootloading()
         self.release_connections()
         # send bootloader commands. TODO - should it use subprocess.call() instead of os.system()?
-        port_prefix, port_number = split_port_name(com_port.value.decode())
+        if com_port is None:
+            com_port = self.data_port_name
+        port_prefix, port_number = split_port_name(com_port)
 
         print(f"Using port {self.data_port_name} split into prefix '{port_prefix}' and number {port_number}")
 
@@ -114,7 +116,7 @@ class X3_Single_Port(Single_Port_Unit):
         return None
         
     @classmethod
-    def auto(cls):
+    def auto(cls, manual_fallback=True):
         board = cls()
         try:
             success = True
@@ -130,7 +132,7 @@ class X3_Single_Port(Single_Port_Unit):
         else:
             # file not exist, or connecting based on file fails -> detect the settings, then save in a file
             board.release_connections()
-            if board.auto_no_cache():  # None on fail
+            if board.auto_no_cache(manual_fallback):  # None on fail
                 board.write_connection_settings()  # also counts as success -> save.
             else:
                 board.release_connections()
