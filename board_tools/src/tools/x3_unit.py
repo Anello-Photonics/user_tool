@@ -109,5 +109,5 @@ class X3_Unit(IMUBoard):
 
 
 if __name__ == "__main__":
-    x = X3_unit(data_port="COM11", control_port="COM12", timeout=0.4)
+    x = X3_Unit(data_port="COM11", control_port="COM12", timeout=0.4)
     print("done")

@@ -68,7 +68,7 @@ class IMUBoard:
         return "IMUBoard: "+str(self.__dict__)
 
     @classmethod
-    def auto(cls, set_data_port=True):
+    def auto(cls, set_data_port=True, manual_fallback=True):
         board = cls()
         try:
             success = True
@@ -89,7 +89,7 @@ class IMUBoard:
             # file not exist, or connecting based on file fails -> detect the settings, then save in a file
             #print("connection from cache failed -> do auto search")
             board.release_connections()
-            if board.auto_no_cache(set_data_port): # None on fail
+            if board.auto_no_cache(set_data_port, manual_fallback): # None on fail
                 board.write_connection_settings(set_data_port) #also counts as success -> save.
             else:
                 board.release_connections()
@@ -383,7 +383,7 @@ class IMUBoard:
         return sorted([p.device for p in list_ports.comports()])
 
     # with no cached value - auto connect by trying baud 921600 for all ports first, then other bauds
-    def auto_no_cache(self, set_data_port=True):
+    def auto_no_cache(self, set_data_port=True, manual_fallback=True):
         #print("\n_____auto no cache_____")
         bauds = ALLOWED_BAUD.copy() #already in preferred order
         for control_baud in bauds:
@@ -393,7 +393,9 @@ class IMUBoard:
                 return True
             else:
                 continue
-        return self.connect_manually(set_data_port, auto_baud=False) #TODO - turn this off, or do based on a "manual_fallback" arg?
+        if manual_fallback:
+            return self.connect_manually(set_data_port, auto_baud=False)
+        return None # connect_manually returns None on fail
 
     # detect ports with known baud rate, returns ports or None on fail
     def auto_port(self, control_baud, set_data_port=True):
@@ -883,13 +885,6 @@ class IMUBoard:
                 return True
         return False
 
-    # makes lookup tables from flash apply to ram without restarting the unit.
-    # unlike rst 0 and 2, this doesn't restart the unit, so it gets a response.
-    # TODO - this is added in X3 0.0.27 firmware. Move into X3_Board class, or will other products have it too?
-    def apply_lookup_tables(self):
-        m = Message({'msgtype': b'RST', 'code': 3})
-        return self.send_control_message(m)
-
     #send odometer message: over the udp odometer connection if exists, else config connection
     #config connection can take odometer messages but it could interfere with other config messaging
     def send_odometer(self, speed):
@@ -1090,6 +1085,9 @@ class IMUBoard:
         #m = Message({'msgtype': b'STA'})
         return self.retry_get_info(self.get_status, b'STA', 'payload') #could change later if we finish implementing status
 
+    def retry_ping(self):
+        return self.retry_get_info(self.ping, b'PNG', 'code')
+
     #getters with keywords: use retry_get_info_keywords
     #use this like: odr, msgtype = b.retry_get_cfg_flash(["odr", "msgtype"]). single value:  odr, = b.retry_get_cfg_flash(["odr"])
     #make return_dict an arg for these too, or just return list always?
@@ -1143,18 +1141,6 @@ class IMUBoard:
                 return int(self.retry_get_cfg_flash(["bau"])[0])
         except Exception as e:
             return None
-
-    #def retry_ping(self):  - should it have this?
-    #def retry_echo(self, contents): - should it have this?
-
-    #no retry methods for resets (bootloader/regular) or odometer since they don't respond.
-
-    # def retry_enable_odo_ram(self):
-    #     return self.set_cfg({"odo": b'on'})
-    #
-    # def retry_enable_odo_flash(self):
-    #     return self.set_cfg_flash({"odo": b'on'})
-    #
 
     #config write functions with separate writes and retry, by type
     #should it return pass/fail, or lists of which set, which failed to set?
@@ -1237,7 +1223,7 @@ class IMUBoard:
         # TODO should it check for 32 bit, or Windows ARM vs x86?
 
     # bootloader function taking hex file path and expected version after
-    def bootload_with_file_path(self, bootloader_path, hex_file_path, expected_version_after="unknown", num_attempts=1):
+    def bootload_with_file_path(self, bootloader_path, hex_file_path, com_port=None, expected_version_after="unknown", num_attempts=1):
         if bootloader_path is None:
             return
         print(f"\nUpdating firmware with {bootloader_path}")
@@ -1250,7 +1236,9 @@ class IMUBoard:
 
         self.release_connections()
         # send bootloader commands. TODO - should it use subprocess.call() instead of os.system()?
-        port_prefix, port_number = split_port_name(self.data_port_name)
+        if com_port is None:
+            com_port = self.data_port_name
+        port_prefix, port_number = split_port_name(com_port)
 
         computer_os = os_type()
         if computer_os.lower() == "windows":

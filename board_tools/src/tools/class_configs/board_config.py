@@ -2,6 +2,7 @@ DEFAULT_BAUD = 921600
 # all allowed bauds in the order that autobaud should try, common settings first
 # usually 921600 for EVK, 230400 for GNSS and IMU, 460800 X3. Others can be set by the user.
 ALLOWED_BAUD = [921600, 230400, 460800, 19200, 115200, 57600]
+X3_TRY_BAUD_ORDER = [460800, 921600, 230400, 115200, 57600, 19200 ]
 ALLOWED_BAUD_SORTED = sorted(ALLOWED_BAUD, key=lambda x: -x)  # in high-low order, for menus
 ALLOWED_SMP = [200, 400, 500, 1000, 2000]
 TIMEOUT_AUTOBAUD = 0.2 #timeout (s) while searching for units/checking baud
@@ -9,6 +10,7 @@ TIMEOUT_REGULAR = 0.4 #normal timeout when connected. todo - does it ever need a
 #connection info for imuboard.auto(). paths relative to files in Python_Code/board_tools/src/tools
 CONNECTION_CACHE_WITH_DATA_PORT = "connection_cache_dataport.txt"  #when data port used
 CONNECTION_CACHE_NO_DATA_PORT = "connection_cache_no_dataport.txt" #when data port not used
+CONNECTION_CACHE_SINGLE_PORT = "connection_cache_single_port.txt"
 LOG_PATH = "../../../logs"
 DEBUG_PATH = "../../../debug"
 LOG_FILETYPE = ".txt"
