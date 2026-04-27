@@ -104,7 +104,7 @@ class Single_Port_Unit(IMUBoard):
             else:
                 continue
         if manual_fallback:
-            return self.connect_manually()
+            return self.connect_manually(auto_baud=False)
         return None # connect_manually returns None on fail
 
     # detect ports with known baud rate, returns ports or None on fail
@@ -234,7 +234,7 @@ class Single_Port_Unit(IMUBoard):
         if hasattr(self, "serial_connection") and self.serial_connection is not None:
             self.serial_connection.close()
 
-    def connect_manually(self):  # todo - does it need set_data_port, set_config_port dummy args for compatibility?
+    def connect_manually(self, auto_baud=True):  # todo - does it need set_data_port, set_config_port dummy args for compatibility?
         port_names = self.list_ports()
         if not port_names:
             show_and_pause("no ports found.")
@@ -258,12 +258,19 @@ class Single_Port_Unit(IMUBoard):
                 # connect with default baud. then check baud automatically, or ask for baud if that fails.
                 data_con = SerialConnection(data_port, self.serial_baud, timeout=TIMEOUT_REGULAR)
                 self.serial_connection = data_con
-                baud = self.auto_detect_baud()
+                # baud: use manual select if auto_baud False or if auto detect fails
+                baud = None
+                if auto_baud:
+                    baud = self.auto_detect_baud()
                 if baud is None:
-                    valid_baud_rates = ALLOWED_BAUD.copy()
+                    baud_options = ALLOWED_BAUD_SORTED.copy()
+                    baud_options.append("auto detect")
                     print("\nselect baud rate")
-                    baud = valid_baud_rates[cutie.select(valid_baud_rates, selected_index=0)]
-                    self.set_connection_baud(baud)
+                    baud = baud_options[cutie.select(baud_options, selected_index=0)]
+                    if baud == "auto detect":
+                        self.auto_detect_baud()
+                    else:
+                        self.set_connection_baud(baud)
                 # todo - should it do ping or other test to check connection here, or just believe you picked the right port?
                 # todo - call self.write_connection_settings here?
                 print(f"\nconnected to data port: {data_port}")
@@ -294,9 +301,13 @@ class Single_Port_Unit(IMUBoard):
         # use the new baud if it changed, otherwise ping and other messages will fail.
         self.set_connection_baud(new_baud)
 
+        time_before = time.time()
         while self.ping() is None:
-            # TODO - should this time out eventually -> retry connection?
+            if time.time() - time_before > 10:
+                return False # indicate error in restart
             time.sleep(wait_time)
+
+        return True #indicate successful restart
 
     def set_connection_baud(self, new_baud=None):
         if new_baud:

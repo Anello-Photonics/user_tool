@@ -298,7 +298,7 @@ class UserProgram:
             print("\nFor ANELLO X3: use port number of RS422 or RS232 cable")
             self.release()
             board = X3_Single_Port()
-            manual_result = board.connect_manually()
+            manual_result = board.connect_manually(auto_baud=False)
             if manual_result is None:
                 return None
             self.single_port = True
@@ -817,6 +817,8 @@ class UserProgram:
     def reset(self):
         if not self.board:
             show_and_pause("must connect to unit before resetting")
+            return
+        if not self.check_stop_data_mode():
             return
 
         # serial connection needs to use new bauds if they changed.
