@@ -239,6 +239,8 @@ class Single_Port_Unit(IMUBoard):
         if not port_names:
             show_and_pause("no ports found.")
             return None
+        # Add option to manually enter port path (for non-standard ports like /dev/ttyUART*)
+        port_names.append("enter manually")
         port_names.append("cancel")
 
         data_port = None
@@ -248,6 +250,10 @@ class Single_Port_Unit(IMUBoard):
                 data_port = port_names[cutie.select(port_names, selected_index=0)]
                 if data_port == "cancel":
                     return None
+                if data_port == "enter manually":
+                    data_port = input("enter data port path (e.g. /dev/ttyUART0): ").strip()
+                    if not data_port:
+                        continue
 
                 # connect with default baud. then check baud automatically, or ask for baud if that fails.
                 data_con = SerialConnection(data_port, self.serial_baud, timeout=TIMEOUT_REGULAR)
