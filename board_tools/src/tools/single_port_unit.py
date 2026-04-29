@@ -186,8 +186,8 @@ class Single_Port_Unit(IMUBoard):
 
     # check if port is correct. use ping for now - could also check for output messages
     def check_port(self):
-        response = self.ping()
-        return response and response.valid and response.msgtype == b'PNG'
+        self.clear_inputs()
+        return self.retry_ping() is not None
 
     def clear_inputs(self):
         self.clear_connection(self.serial_connection, self.parser, DEFAULT_PORT_LATENCY_S)
