@@ -935,7 +935,7 @@ class IMUBoard:
                     return getattr(resp, attr_name)
             except Exception as e:
                 debug_print(f"error getting {expect_response_type}, retrying: {e}")
-        print(f"retry limit: could not find attribute {attr_name}") #make this debug_print too?
+        debug_print(f"retry limit: could not find attribute {attr_name}")
         return None  # did not find it within retry limit
 
     # retry getters with keywords , like self.get_cfg, self.get_cfg_flash, self.get_sensor, self.get_vehicle,
