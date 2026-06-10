@@ -1239,6 +1239,9 @@ class IMUBoard:
         if com_port is None:
             com_port = self.data_port_name
         port_prefix, port_number = split_port_name(com_port)
+        if port_number is None:
+            show_and_pause(f"Invalid bootloader COM port: {com_port}")
+            return
 
         computer_os = os_type()
         if computer_os.lower() == "windows":
