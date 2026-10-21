@@ -52,7 +52,10 @@ def draw_map(lat, lon, zoom, map_size, arrow_size, heading_deg, arrow_image_path
     #geotiler.cache.caching_downloader(get, set, downloader, tiles, num_workers, **kw)
     my_downloader = partial(caching_downloader, dictionary_get, dictionary_set, fetch_tiles)
     with open(os.devnull, "w") as f, contextlib.redirect_stderr(f):
-        image = geotiler.render_map(map, downloader=my_downloader)
+        # geotiler's synchronous wrapper assumes an existing event loop,
+        # which Python 3.14 no longer creates implicitly. Own the loop for
+        # each render so it is also closed when downloading or rendering fails.
+        image = asyncio.run(geotiler.render_map_async(map, downloader=my_downloader))
 
     #todo - any map settings like what things to show, language, colors, map scale etc?
 
